@@ -1,0 +1,50 @@
+name: Relay / provider configuration
+description: Problems with Wokey, OpenRouter, custom relay, Base URL, model name, API Key, config.toml, or connection tests.
+title: "[Config]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not paste real API keys. The Wokey preset contains a public test key, but your own provider keys are private.
+  - type: dropdown
+    id: provider
+    attributes:
+      label: Provider
+      options:
+        - Wokey
+        - OpenRouter
+        - Custom OpenAI-compatible relay
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: base_url
+    attributes:
+      label: Base URL
+      description: You may redact private domains or paths.
+      placeholder: https://relay.example.com/v1
+  - type: input
+    id: model
+    attributes:
+      label: Model
+      placeholder: auto / openai/gpt-4.1 / gpt-4.1
+  - type: textarea
+    id: config
+    attributes:
+      label: Sanitized config.toml section
+      description: Remove experimental_bearer_token and any other secret values.
+      render: toml
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Problem description
+      placeholder: Connection test returns 401 / config is not merged / Codex starts with old provider...
+    validations:
+      required: true
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Before submitting
+      options:
+        - label: I removed API keys and tokens from the report.
+          required: true

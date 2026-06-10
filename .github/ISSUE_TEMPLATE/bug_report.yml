@@ -1,0 +1,74 @@
+name: Bug report
+description: Launcher, installer, config merge, ASAR patch, or runtime behavior is not working as expected.
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please redact API keys, tokens, private hostnames, private IPs, account IDs, and screenshots containing secrets.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Launch / startup
+        - Relay configuration
+        - Config backup / merge
+        - Provider connection test
+        - Chinese UI patch
+        - Browser / Chrome / Computer Use
+        - Windows installer
+        - Build scripts
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: current_behavior
+    attributes:
+      label: Current behavior
+      description: What happened? Include exact error text when possible.
+    validations:
+      required: true
+  - type: textarea
+    id: expected_behavior
+    attributes:
+      label: Expected behavior
+      description: What should have happened?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction steps
+      placeholder: |
+        1. Install...
+        2. Open...
+        3. Configure...
+        4. See...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or sanitized config
+      description: Remove API keys, tokens, and private endpoints.
+      render: shell
+  - type: input
+    id: version
+    attributes:
+      label: Codex-ZH version or commit
+      placeholder: 0.1.1 or commit SHA
+  - type: input
+    id: windows_version
+    attributes:
+      label: Windows version
+      placeholder: Windows 10 22H2 / Windows 11 24H2
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Before submitting
+      options:
+        - label: I removed API keys, tokens, private hostnames, private IPs, and account identifiers.
+          required: true
+        - label: I tested with the latest available build or current main branch.
+          required: false

@@ -1,0 +1,230 @@
+name: Release package
+
+on:
+  push:
+    tags:
+      - "v*"
+  release:
+    types:
+      - published
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Codex-ZH version. Defaults to the package.json version."
+        required: false
+        type: string
+      source_codex_zip_url:
+        description: "Public URL to a zip containing the unpacked official Windows Codex app. Prefer the repository secret for private URLs."
+        required: false
+        type: string
+      source_codex_sha256:
+        description: "Optional SHA-256 for the source zip."
+        required: false
+        type: string
+      source_codex_label:
+        description: "Optional label used in the installer filename, for example OpenAI.Codex-26.608.1337.0."
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-package-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  windows-installer:
+    name: Build Windows installer
+    runs-on: windows-latest
+    env:
+      CODEX_WINDOWS_APP_ZIP_URL: ${{ secrets.CODEX_WINDOWS_APP_ZIP_URL }}
+      CODEX_WINDOWS_APP_ZIP_SHA256: ${{ secrets.CODEX_WINDOWS_APP_ZIP_SHA256 }}
+      CODEX_WINDOWS_APP_LABEL: ${{ secrets.CODEX_WINDOWS_APP_LABEL }}
+      SOURCE_CODEX_ZIP_URL_INPUT: ${{ inputs.source_codex_zip_url }}
+      SOURCE_CODEX_SHA256_INPUT: ${{ inputs.source_codex_sha256 }}
+      SOURCE_CODEX_LABEL_INPUT: ${{ inputs.source_codex_label }}
+      VERSION_INPUT: ${{ inputs.version }}
+      RELEASE_TAG: ${{ github.event.release.tag_name || github.ref_name }}
+      SOURCE_ARCHIVE: C:\Codex-ZH\source\codex-windows-app.zip
+      SOURCE_EXTRACT_ROOT: C:\Codex-ZH\source\expanded
+      STAGING_ROOT: C:\Codex-ZH\staging
+      RELEASE_OUTPUT_DIR: C:\Codex-ZH\release
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Run tests
+        run: npm test
+
+      - name: Install Inno Setup
+        shell: powershell
+        run: choco install innosetup --yes --no-progress
+
+      - name: Resolve release version
+        shell: powershell
+        run: |
+          $version = $env:VERSION_INPUT
+          if (!$version) {
+            $version = $env:RELEASE_TAG
+          }
+          if (!$version) {
+            $version = (Get-Content -Raw package.json | ConvertFrom-Json).version
+          }
+          $version = $version.Trim() -replace '^refs/tags/', '' -replace '^v', ''
+          if ($version -notmatch '^\d+\.\d+\.\d+([-.+][0-9A-Za-z.-]+)?$') {
+            throw "Version must look like SemVer, with optional leading v in the tag. Got: $version"
+          }
+          $buildStamp = "release-" + ($version -replace '[^0-9A-Za-z._-]', '-')
+          "CODEX_ZH_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "CODEX_ZH_BUILD_STAMP=$buildStamp" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Download official Codex app source
+        shell: powershell
+        run: |
+          $sourceUrl = $env:SOURCE_CODEX_ZIP_URL_INPUT
+          if (!$sourceUrl) {
+            $sourceUrl = $env:CODEX_WINDOWS_APP_ZIP_URL
+          }
+          if (!$sourceUrl) {
+            throw "Set CODEX_WINDOWS_APP_ZIP_URL as a repository secret, or provide source_codex_zip_url when running workflow_dispatch."
+          }
+
+          New-Item -ItemType Directory -Force -Path (Split-Path -Parent $env:SOURCE_ARCHIVE) | Out-Null
+          $ProgressPreference = "SilentlyContinue"
+          Invoke-WebRequest -Uri $sourceUrl -OutFile $env:SOURCE_ARCHIVE
+
+          $expectedHash = $env:SOURCE_CODEX_SHA256_INPUT
+          if (!$expectedHash) {
+            $expectedHash = $env:CODEX_WINDOWS_APP_ZIP_SHA256
+          }
+          if ($expectedHash) {
+            $actualHash = (Get-FileHash -Algorithm SHA256 $env:SOURCE_ARCHIVE).Hash.ToLowerInvariant()
+            if ($actualHash -ne $expectedHash.ToLowerInvariant()) {
+              throw "Source archive SHA-256 mismatch. Expected $expectedHash, got $actualHash."
+            }
+          }
+
+      - name: Extract official Codex app source
+        shell: powershell
+        run: |
+          if (Test-Path -LiteralPath $env:SOURCE_EXTRACT_ROOT) {
+            Remove-Item -LiteralPath $env:SOURCE_EXTRACT_ROOT -Force -Recurse
+          }
+          New-Item -ItemType Directory -Force -Path $env:SOURCE_EXTRACT_ROOT | Out-Null
+          Expand-Archive -LiteralPath $env:SOURCE_ARCHIVE -DestinationPath $env:SOURCE_EXTRACT_ROOT -Force
+
+          $candidates = Get-ChildItem -LiteralPath $env:SOURCE_EXTRACT_ROOT -Filter Codex.exe -File -Recurse |
+            Where-Object { Test-Path -LiteralPath (Join-Path $_.DirectoryName "resources\app.asar") } |
+            Sort-Object { $_.FullName.Length }
+          if (!$candidates) {
+            throw "Could not find a Codex.exe folder with resources\app.asar inside the source zip."
+          }
+
+          $sourceAppDir = $candidates[0].DirectoryName
+          "CODEX_SOURCE_APP_DIR=$sourceAppDir" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Build staged app
+        shell: powershell
+        run: |
+          .\scripts\build-codex-zh-staging.ps1 `
+            -SourceAppDir $env:CODEX_SOURCE_APP_DIR `
+            -ProjectRoot $env:GITHUB_WORKSPACE `
+            -OutputRoot $env:STAGING_ROOT `
+            -BuildStamp $env:CODEX_ZH_BUILD_STAMP
+
+      - name: Build installer
+        shell: powershell
+        run: |
+          $sourceLabel = $env:SOURCE_CODEX_LABEL_INPUT
+          if (!$sourceLabel) {
+            $sourceLabel = $env:CODEX_WINDOWS_APP_LABEL
+          }
+
+          $installerArgs = @(
+            "-StageRoot", (Join-Path $env:STAGING_ROOT "Codex-ZH-$env:CODEX_ZH_BUILD_STAMP"),
+            "-ProjectRoot", $env:GITHUB_WORKSPACE,
+            "-OutputDir", $env:RELEASE_OUTPUT_DIR,
+            "-Version", $env:CODEX_ZH_VERSION
+          )
+          if ($sourceLabel) {
+            $installerArgs += @("-SourceCodexLabel", $sourceLabel)
+          }
+
+          .\scripts\build-codex-zh-installer.ps1 @installerArgs
+
+      - name: Smoke test installer
+        shell: powershell
+        run: |
+          $installer = Get-ChildItem -LiteralPath $env:RELEASE_OUTPUT_DIR -Filter "*.exe" -File | Select-Object -First 1
+          if (!$installer) {
+            throw "Installer not found in $env:RELEASE_OUTPUT_DIR"
+          }
+
+          $process = Start-Process -FilePath $installer.FullName -ArgumentList @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART") -Wait -PassThru
+          if ($process.ExitCode -ne 0) {
+            throw "Installer smoke test failed with exit code $($process.ExitCode)."
+          }
+
+          $installDir = Join-Path $env:ProgramFiles "Codex-ZH"
+          $launcher = Join-Path $installDir "CodexZhLauncher.exe"
+          $codexCli = Join-Path $installDir "app\resources\codex.exe"
+          if (!(Test-Path -LiteralPath $launcher)) {
+            throw "Installed launcher not found: $launcher"
+          }
+          if (!(Test-Path -LiteralPath $codexCli)) {
+            throw "Installed codex CLI not found: $codexCli"
+          }
+
+          & $launcher --no-launch
+          if ($LASTEXITCODE -ne 0) {
+            throw "Launcher self-test failed with exit code $LASTEXITCODE."
+          }
+
+          & $codexCli doctor --summary --ascii --no-color
+          if ($LASTEXITCODE -ne 0) {
+            throw "codex doctor failed with exit code $LASTEXITCODE."
+          }
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: codex-zh-windows-installer
+          path: |
+            C:\Codex-ZH\release\*.exe
+            C:\Codex-ZH\release\*.sha256
+          if-no-files-found: error
+
+      - name: Create release for tag push
+        if: github.event_name == 'push'
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          & gh release view $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY *> $null
+          if ($LASTEXITCODE -ne 0) {
+            & gh release create $env:RELEASE_TAG `
+              --repo $env:GITHUB_REPOSITORY `
+              --target $env:GITHUB_SHA `
+              --title "Codex-ZH $env:RELEASE_TAG" `
+              --notes "Automated Windows package build for $env:RELEASE_TAG."
+          }
+
+      - name: Upload release assets
+        if: github.event_name == 'release' || github.event_name == 'push'
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $assets = Get-ChildItem -LiteralPath $env:RELEASE_OUTPUT_DIR -File |
+            Where-Object { $_.Extension -in @(".exe", ".sha256") } |
+            ForEach-Object { $_.FullName }
+          if (!$assets) {
+            throw "No release assets found in $env:RELEASE_OUTPUT_DIR"
+          }
+          & gh release upload $env:RELEASE_TAG @assets --clobber
