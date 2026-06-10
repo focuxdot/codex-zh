@@ -91,43 +91,79 @@ jobs:
           if (!$sourceUrl) {
             $sourceUrl = $env:CODEX_WINDOWS_APP_ZIP_URL
           }
-          if (!$sourceUrl) {
-            throw "Set CODEX_WINDOWS_APP_ZIP_URL as a repository secret, or provide source_codex_zip_url when running workflow_dispatch."
-          }
 
-          New-Item -ItemType Directory -Force -Path (Split-Path -Parent $env:SOURCE_ARCHIVE) | Out-Null
-          $ProgressPreference = "SilentlyContinue"
-          Invoke-WebRequest -Uri $sourceUrl -OutFile $env:SOURCE_ARCHIVE
+          if ($sourceUrl) {
+            New-Item -ItemType Directory -Force -Path (Split-Path -Parent $env:SOURCE_ARCHIVE) | Out-Null
+            $ProgressPreference = "SilentlyContinue"
+            Invoke-WebRequest -Uri $sourceUrl -OutFile $env:SOURCE_ARCHIVE
 
-          $expectedHash = $env:SOURCE_CODEX_SHA256_INPUT
-          if (!$expectedHash) {
-            $expectedHash = $env:CODEX_WINDOWS_APP_ZIP_SHA256
-          }
-          if ($expectedHash) {
-            $actualHash = (Get-FileHash -Algorithm SHA256 $env:SOURCE_ARCHIVE).Hash.ToLowerInvariant()
-            if ($actualHash -ne $expectedHash.ToLowerInvariant()) {
-              throw "Source archive SHA-256 mismatch. Expected $expectedHash, got $actualHash."
+            $expectedHash = $env:SOURCE_CODEX_SHA256_INPUT
+            if (!$expectedHash) {
+              $expectedHash = $env:CODEX_WINDOWS_APP_ZIP_SHA256
             }
+            if ($expectedHash) {
+              $actualHash = (Get-FileHash -Algorithm SHA256 $env:SOURCE_ARCHIVE).Hash.ToLowerInvariant()
+              if ($actualHash -ne $expectedHash.ToLowerInvariant()) {
+                throw "Source archive SHA-256 mismatch. Expected $expectedHash, got $actualHash."
+              }
+            }
+          } else {
+            $winget = Get-Command winget.exe -ErrorAction SilentlyContinue
+            if (!$winget) {
+              throw "CODEX_WINDOWS_APP_ZIP_URL is not set and winget.exe is not available on this runner."
+            }
+
+            & $winget.Source install Codex -s msstore --accept-package-agreements --accept-source-agreements --disable-interactivity
+            if ($LASTEXITCODE -ne 0) {
+              throw "winget install Codex failed with exit code $LASTEXITCODE."
+            }
+
+            $package = Get-AppxPackage -Name OpenAI.Codex -ErrorAction SilentlyContinue |
+              Sort-Object { [version]$_.Version } -Descending |
+              Select-Object -First 1
+            if (!$package) {
+              throw "winget completed, but OpenAI.Codex was not found with Get-AppxPackage."
+            }
+
+            $searchRoots = @(
+              $package.InstallLocation,
+              (Join-Path $package.InstallLocation "app")
+            )
+            $candidates = foreach ($root in $searchRoots) {
+              if (Test-Path -LiteralPath $root) {
+                Get-ChildItem -LiteralPath $root -Filter Codex.exe -File -Recurse |
+                  Where-Object { Test-Path -LiteralPath (Join-Path $_.DirectoryName "resources\app.asar") }
+              }
+            }
+            $source = $candidates | Sort-Object { $_.FullName.Length } | Select-Object -First 1
+            if (!$source) {
+              throw "Installed OpenAI.Codex package does not contain Codex.exe with resources\app.asar."
+            }
+            "CODEX_SOURCE_APP_DIR=$($source.DirectoryName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           }
 
       - name: Extract official Codex app source
         shell: powershell
         run: |
-          if (Test-Path -LiteralPath $env:SOURCE_EXTRACT_ROOT) {
-            Remove-Item -LiteralPath $env:SOURCE_EXTRACT_ROOT -Force -Recurse
-          }
-          New-Item -ItemType Directory -Force -Path $env:SOURCE_EXTRACT_ROOT | Out-Null
-          Expand-Archive -LiteralPath $env:SOURCE_ARCHIVE -DestinationPath $env:SOURCE_EXTRACT_ROOT -Force
+          if ($env:CODEX_SOURCE_APP_DIR) {
+            Write-Host "Using installed official Codex app source: $env:CODEX_SOURCE_APP_DIR"
+          } else {
+            if (Test-Path -LiteralPath $env:SOURCE_EXTRACT_ROOT) {
+              Remove-Item -LiteralPath $env:SOURCE_EXTRACT_ROOT -Force -Recurse
+            }
+            New-Item -ItemType Directory -Force -Path $env:SOURCE_EXTRACT_ROOT | Out-Null
+            Expand-Archive -LiteralPath $env:SOURCE_ARCHIVE -DestinationPath $env:SOURCE_EXTRACT_ROOT -Force
 
-          $candidates = Get-ChildItem -LiteralPath $env:SOURCE_EXTRACT_ROOT -Filter Codex.exe -File -Recurse |
-            Where-Object { Test-Path -LiteralPath (Join-Path $_.DirectoryName "resources\app.asar") } |
-            Sort-Object { $_.FullName.Length }
-          if (!$candidates) {
-            throw "Could not find a Codex.exe folder with resources\app.asar inside the source zip."
-          }
+            $candidates = Get-ChildItem -LiteralPath $env:SOURCE_EXTRACT_ROOT -Filter Codex.exe -File -Recurse |
+              Where-Object { Test-Path -LiteralPath (Join-Path $_.DirectoryName "resources\app.asar") } |
+              Sort-Object { $_.FullName.Length }
+            if (!$candidates) {
+              throw "Could not find a Codex.exe folder with resources\app.asar inside the source zip."
+            }
 
-          $sourceAppDir = $candidates[0].DirectoryName
-          "CODEX_SOURCE_APP_DIR=$sourceAppDir" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+            $sourceAppDir = $candidates[0].DirectoryName
+            "CODEX_SOURCE_APP_DIR=$sourceAppDir" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          }
 
       - name: Build staged app
         shell: powershell

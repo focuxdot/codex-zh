@@ -11,6 +11,9 @@ test("release workflow packages Windows installer after GitHub Release publish",
   assert.match(workflow, /contents: write/u);
   assert.match(workflow, /CODEX_WINDOWS_APP_ZIP_URL/u);
   assert.match(workflow, /CODEX_WINDOWS_APP_ZIP_SHA256/u);
+  assert.match(workflow, /winget\.exe/u);
+  assert.match(workflow, /install Codex -s msstore/u);
+  assert.match(workflow, /Get-AppxPackage -Name OpenAI\.Codex/u);
   assert.match(workflow, /scripts\\build-codex-zh-staging\.ps1/u);
   assert.match(workflow, /scripts\\build-codex-zh-installer\.ps1/u);
   assert.match(workflow, /\$codexCli doctor --summary --ascii --no-color/u);
