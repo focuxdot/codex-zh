@@ -36,7 +36,7 @@ concurrency:
 jobs:
   windows-installer:
     name: Build Windows installer
-    runs-on: windows-latest
+    runs-on: windows-2022
     env:
       CODEX_WINDOWS_APP_ZIP_URL: ${{ secrets.CODEX_WINDOWS_APP_ZIP_URL }}
       CODEX_WINDOWS_APP_ZIP_SHA256: ${{ secrets.CODEX_WINDOWS_APP_ZIP_SHA256 }}
@@ -52,12 +52,12 @@ jobs:
       RELEASE_OUTPUT_DIR: C:\Codex-ZH\release
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: "20"
+          node-version: "24"
 
       - name: Run tests
         run: npm test

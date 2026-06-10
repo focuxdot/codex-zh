@@ -7,7 +7,10 @@ const workflow = readFileSync(".github/workflows/release.yml", "utf8");
 test("release workflow packages Windows installer after GitHub Release publish", () => {
   assert.match(workflow, /push:\s*\n\s+tags:\s*\n\s+- "v\*"/u);
   assert.match(workflow, /release:\s*\n\s+types:\s*\n\s+- published/u);
-  assert.match(workflow, /runs-on: windows-latest/u);
+  assert.match(workflow, /runs-on: windows-2022/u);
+  assert.match(workflow, /actions\/checkout@v6/u);
+  assert.match(workflow, /actions\/setup-node@v6/u);
+  assert.match(workflow, /node-version: "24"/u);
   assert.match(workflow, /contents: write/u);
   assert.match(workflow, /CODEX_WINDOWS_APP_ZIP_URL/u);
   assert.match(workflow, /CODEX_WINDOWS_APP_ZIP_SHA256/u);
