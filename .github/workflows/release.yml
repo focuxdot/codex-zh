@@ -182,14 +182,14 @@ jobs:
             $sourceLabel = $env:CODEX_WINDOWS_APP_LABEL
           }
 
-          $installerArgs = @(
-            "-StageRoot", (Join-Path $env:STAGING_ROOT "Codex-ZH-$env:CODEX_ZH_BUILD_STAMP"),
-            "-ProjectRoot", $env:GITHUB_WORKSPACE,
-            "-OutputDir", $env:RELEASE_OUTPUT_DIR,
-            "-Version", $env:CODEX_ZH_VERSION
-          )
+          $installerArgs = @{
+            StageRoot = Join-Path $env:STAGING_ROOT "Codex-ZH-$env:CODEX_ZH_BUILD_STAMP"
+            ProjectRoot = $env:GITHUB_WORKSPACE
+            OutputDir = $env:RELEASE_OUTPUT_DIR
+            Version = $env:CODEX_ZH_VERSION
+          }
           if ($sourceLabel) {
-            $installerArgs += @("-SourceCodexLabel", $sourceLabel)
+            $installerArgs.SourceCodexLabel = $sourceLabel
           }
 
           .\scripts\build-codex-zh-installer.ps1 @installerArgs
