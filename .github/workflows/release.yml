@@ -189,9 +189,20 @@ jobs:
             throw "Launcher self-test failed with exit code $($launcherProcess.ExitCode)."
           }
 
-          & $codexCli doctor --summary --ascii --no-color
+          & $codexCli --version
           if ($LASTEXITCODE -ne 0) {
-            throw "codex doctor failed with exit code $LASTEXITCODE."
+            throw "codex version check failed with exit code $LASTEXITCODE."
+          }
+
+          $doctorOutput = & $codexCli doctor --summary --ascii --no-color 2>&1
+          $doctorExitCode = $LASTEXITCODE
+          $doctorOutput | ForEach-Object { Write-Host $_ }
+          $doctorText = $doctorOutput -join "`n"
+          if ($doctorText -notmatch "\[ok\]\s+install\s+consistent") {
+            throw "codex doctor did not report a consistent install."
+          }
+          if ($doctorExitCode -ne 0 -and $doctorText -notmatch "no Codex credentials were found") {
+            throw "codex doctor failed with exit code $doctorExitCode."
           }
 
       - name: Upload workflow artifact

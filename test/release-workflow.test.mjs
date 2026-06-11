@@ -26,7 +26,10 @@ test("release workflow packages Windows installer after GitHub Release publish",
   assert.doesNotMatch(workflow, /\$installerArgs = @\(/u);
   assert.match(workflow, /Start-Process -FilePath \$launcher -ArgumentList @\("--no-launch"\) -Wait -PassThru/u);
   assert.match(workflow, /\$launcherProcess\.ExitCode/u);
+  assert.match(workflow, /\$codexCli --version/u);
   assert.match(workflow, /\$codexCli doctor --summary --ascii --no-color/u);
+  assert.match(workflow, /install\\s\+consistent/u);
+  assert.match(workflow, /no Codex credentials were found/u);
   assert.match(workflow, /gh release create \$env:RELEASE_TAG/u);
   assert.match(workflow, /gh release upload \$env:RELEASE_TAG @assets --clobber/u);
 });
