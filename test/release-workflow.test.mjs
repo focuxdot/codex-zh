@@ -37,11 +37,16 @@ test("release workflow packages Windows installer after GitHub Release publish",
   assert.match(workflow, /Failed to inspect release \$env:RELEASE_TAG/u);
   assert.match(workflow, /gh release create \$env:RELEASE_TAG/u);
   assert.match(workflow, /gh release upload \$env:RELEASE_TAG @assets --clobber/u);
+  assert.match(workflow, /node \.\\scripts\\update-readme-downloads\.mjs/u);
+  assert.match(workflow, /git checkout -B main origin\/main/u);
+  assert.match(workflow, /docs: update README download links for \$env:RELEASE_TAG/u);
+  assert.match(workflow, /git push origin HEAD:main/u);
 });
 
 test("release workflow keeps source app binary out of the repository", () => {
   assert.match(workflow, /Invoke-WebRequest -Uri \$sourceUrl -OutFile \$env:SOURCE_ARCHIVE/u);
   assert.match(workflow, /Expand-Archive -LiteralPath \$env:SOURCE_ARCHIVE/u);
-  assert.doesNotMatch(workflow, /git add/u);
-  assert.doesNotMatch(workflow, /git commit/u);
+  assert.doesNotMatch(workflow, /git add .*SOURCE_ARCHIVE/u);
+  assert.doesNotMatch(workflow, /git add .*RELEASE_OUTPUT_DIR/u);
+  assert.match(workflow, /git add README\.md/u);
 });
