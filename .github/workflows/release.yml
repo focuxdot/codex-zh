@@ -201,9 +201,13 @@ jobs:
           if ($doctorText -notmatch "\[ok\]\s+install\s+consistent") {
             throw "codex doctor did not report a consistent install."
           }
-          if ($doctorExitCode -ne 0 -and $doctorText -notmatch "no Codex credentials were found") {
-            throw "codex doctor failed with exit code $doctorExitCode."
+          if ($doctorExitCode -ne 0) {
+            if ($doctorText -notmatch "no Codex credentials were found") {
+              throw "codex doctor failed with exit code $doctorExitCode."
+            }
+            Write-Warning "codex doctor reported missing credentials in CI; install consistency checks passed."
           }
+          $global:LASTEXITCODE = 0
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
