@@ -23,17 +23,23 @@ Source code can be public. Release artifacts need a separate maintainer decision
 
 ## Mandatory Maintainer Push Identity
 
-**Stop before every `git push`: this repository must be pushed as `focuxdot`, not the machine's default GitHub identity.**
+**Stop before every local `git push`: this repository must be pushed as `focuxdot`, not the machine's default GitHub identity.**
 
-On this workstation, the default `github.com` SSH key may authenticate as `brucephaner`, which only has read access to `focuxdot/codex-zh`. Do not run a plain `git push origin main` unless the active SSH identity has already been verified as `focuxdot`.
+On this workstation, the default `github.com` SSH key may authenticate as `brucephaner`, which only has read access to `focuxdot/codex-zh`. Do not run a plain `git push origin main`.
 
-Required identity check:
+Required local identity check:
+
+```bash
+npm run push:check
+```
+
+The check wraps this SSH probe and only accepts this account:
 
 ```bash
 ssh -i ~/.ssh/github_focuxdot_account -o IdentitiesOnly=yes -T git@github.com
 ```
 
-The expected response is:
+Expected response:
 
 ```text
 Hi focuxdot! You've successfully authenticated, but GitHub does not provide shell access.
@@ -44,13 +50,13 @@ If the response says `Hi brucephaner!`, stop and do not push.
 Required push command for `main`:
 
 ```bash
-GIT_SSH_COMMAND='ssh -i ~/.ssh/github_focuxdot_account -o IdentitiesOnly=yes' git push origin main
+npm run push:focuxdot -- origin main
 ```
 
 Required push command for release tags:
 
 ```bash
-GIT_SSH_COMMAND='ssh -i ~/.ssh/github_focuxdot_account -o IdentitiesOnly=yes' git push origin v0.1.1
+npm run push:focuxdot -- origin v0.1.2
 ```
 
 After pushing, confirm remote sync:
@@ -60,7 +66,7 @@ git rev-parse HEAD
 git ls-remote origin refs/heads/main
 ```
 
-The two SHAs must match for `main` pushes. `gh auth status` alone is not enough because the GitHub CLI token and the SSH identity can belong to different accounts.
+The two SHAs must match for `main` pushes. `gh auth status` alone is not enough because the GitHub CLI token and the SSH identity can belong to different accounts. The GitHub Actions workflow may push README release-link updates with `github-actions[bot]`; this identity rule is for local maintainer pushes.
 
 ## GitHub Release Packaging
 
@@ -98,7 +104,7 @@ Typical release command:
 
 ```bash
 git tag v0.1.1
-GIT_SSH_COMMAND='ssh -i ~/.ssh/github_focuxdot_account -o IdentitiesOnly=yes' git push origin v0.1.1
+npm run push:focuxdot -- origin v0.1.1
 ```
 
 Before publishing a release:

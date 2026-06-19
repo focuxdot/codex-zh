@@ -3,6 +3,10 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const workflow = readFileSync(".github/workflows/release.yml", "utf8");
+const packageJson = readFileSync("package.json", "utf8");
+const readiness = readFileSync("OPEN_SOURCE_READINESS.md", "utf8");
+const contributing = readFileSync("CONTRIBUTING.md", "utf8");
+const focuxdotPush = readFileSync("scripts/git-push-focuxdot.mjs", "utf8");
 
 test("release workflow packages Windows installer after GitHub Release publish", () => {
   assert.match(workflow, /push:\s*\n\s+tags:\s*\n\s+- "v\*"/u);
@@ -49,4 +53,20 @@ test("release workflow keeps source app binary out of the repository", () => {
   assert.doesNotMatch(workflow, /git add .*SOURCE_ARCHIVE/u);
   assert.doesNotMatch(workflow, /git add .*RELEASE_OUTPUT_DIR/u);
   assert.match(workflow, /git add README\.md/u);
+});
+
+test("maintainer push docs require the focuxdot SSH identity wrapper", () => {
+  assert.match(packageJson, /"push:check": "node scripts\/git-push-focuxdot\.mjs --check"/u);
+  assert.match(packageJson, /"push:focuxdot": "node scripts\/git-push-focuxdot\.mjs"/u);
+  assert.match(focuxdotPush, /github_focuxdot_account/u);
+  assert.match(focuxdotPush, /git@github\\.com:focuxdot\\\/codex-zh/u);
+  assert.match(focuxdotPush, /Hi \$\{EXPECTED_ACCOUNT\}!/u);
+  assert.match(focuxdotPush, /Refusing to push: GitHub SSH identity is not/u);
+  assert.match(focuxdotPush, /GIT_SSH_COMMAND/u);
+  assert.match(readiness, /Do not run a plain `git push origin main`/u);
+  assert.match(readiness, /npm run push:check/u);
+  assert.match(readiness, /npm run push:focuxdot -- origin main/u);
+  assert.match(readiness, /npm run push:focuxdot -- origin v0\.1\.2/u);
+  assert.match(readiness, /gh auth status` alone is not enough/u);
+  assert.match(contributing, /Do not use plain `git push` from a workstation/u);
 });

@@ -40,7 +40,7 @@ npm run config -- --preset openrouter --model openai/gpt-4.1 --api-key-env OPENR
 
 ## Maintainer Pushes
 
-Maintainers pushing directly to `focuxdot/codex-zh` must follow the mandatory GitHub identity check in [OPEN_SOURCE_READINESS.md](OPEN_SOURCE_READINESS.md#mandatory-maintainer-push-identity). Do not use the workstation's default `github.com` SSH identity unless it verifies as `focuxdot`.
+Maintainers pushing directly to `focuxdot/codex-zh` must use the mandatory push wrapper in [OPEN_SOURCE_READINESS.md](OPEN_SOURCE_READINESS.md#mandatory-maintainer-push-identity): run `npm run push:check`, then push with `npm run push:focuxdot -- origin main` or `npm run push:focuxdot -- origin <tag>`. Do not use plain `git push` from a workstation.
 
 ## Reporting Issues
 
