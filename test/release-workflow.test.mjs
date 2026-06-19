@@ -6,7 +6,7 @@ const workflow = readFileSync(".github/workflows/release.yml", "utf8");
 const packageJson = readFileSync("package.json", "utf8");
 const readiness = readFileSync("OPEN_SOURCE_READINESS.md", "utf8");
 const contributing = readFileSync("CONTRIBUTING.md", "utf8");
-const focuxdotPush = readFileSync("scripts/git-push-focuxdot.mjs", "utf8");
+const maintainerPush = readFileSync("scripts/git-push-maintainer.mjs", "utf8");
 const chineseLogs = readFileSync("scripts/validate-chinese-logs.mjs", "utf8");
 const releaseNotes = readFileSync("scripts/generate-release-notes.mjs", "utf8");
 const changelog = readFileSync("CHANGELOG.md", "utf8");
@@ -64,21 +64,24 @@ test("release workflow keeps source app binary out of the repository", () => {
   assert.match(workflow, /git add README\.md/u);
 });
 
-test("maintainer push docs require the focuxdot SSH identity wrapper", () => {
-  assert.match(packageJson, /"push:check": "node scripts\/git-push-focuxdot\.mjs --check"/u);
-  assert.match(packageJson, /"push:focuxdot": "node scripts\/git-push-focuxdot\.mjs"/u);
-  assert.match(focuxdotPush, /github_focuxdot_account/u);
-  assert.match(focuxdotPush, /git@github\\.com:focuxdot\\\/codex-zh/u);
-  assert.match(focuxdotPush, /Hi \$\{EXPECTED_ACCOUNT\}!/u);
-  assert.match(focuxdotPush, /Refusing to push: GitHub SSH identity is not/u);
-  assert.match(focuxdotPush, /validate-chinese-logs\.mjs", "--commit-range", "origin\/main\.\.HEAD"/u);
-  assert.match(focuxdotPush, /GIT_SSH_COMMAND/u);
+test("maintainer push docs require the checked SSH wrapper", () => {
+  assert.match(packageJson, /"push:check": "node scripts\/git-push-maintainer\.mjs --check"/u);
+  assert.match(packageJson, /"push:maintainer": "node scripts\/git-push-maintainer\.mjs"/u);
+  assert.match(maintainerPush, /codex-zh\.githubSshKey/u);
+  assert.match(maintainerPush, /CODEX_ZH_GITHUB_SSH_KEY/u);
+  assert.match(maintainerPush, /Hi \$\{expectedAccount\}!/u);
+  assert.match(maintainerPush, /Refusing to push: GitHub SSH identity did not match/u);
+  assert.match(maintainerPush, /validate-chinese-logs\.mjs", "--commit-range", "origin\/main\.\.HEAD"/u);
+  assert.match(maintainerPush, /GIT_SSH_COMMAND/u);
   assert.match(readiness, /Do not run a plain `git push origin main`/u);
+  assert.match(readiness, /codex-zh\.githubSshKey/u);
   assert.match(readiness, /npm run push:check/u);
-  assert.match(readiness, /npm run push:focuxdot -- origin main/u);
-  assert.match(readiness, /npm run push:focuxdot -- origin v0\.1\.2/u);
+  assert.match(readiness, /npm run push:maintainer -- origin main/u);
+  assert.match(readiness, /npm run push:maintainer -- origin v0\.1\.2/u);
   assert.match(readiness, /gh auth status` alone is not enough/u);
   assert.match(contributing, /Do not use plain `git push` from a workstation/u);
+  assert.doesNotMatch(readiness, /github_[a-z0-9_]+_account/u);
+  assert.doesNotMatch(maintainerPush, /github_[a-z0-9_]+_account/u);
 });
 
 test("logs and release-facing copy default to Chinese", () => {

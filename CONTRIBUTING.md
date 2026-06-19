@@ -51,7 +51,7 @@ Codex-ZH faces Chinese-speaking users, so future logs and release-facing copy sh
 
 ## Maintainer Pushes
 
-Maintainers pushing directly to `focuxdot/codex-zh` must use the mandatory push wrapper in [OPEN_SOURCE_READINESS.md](OPEN_SOURCE_READINESS.md#mandatory-maintainer-push-identity): run `npm run push:check`, then push with `npm run push:focuxdot -- origin main` or `npm run push:focuxdot -- origin <tag>`. Do not use plain `git push` from a workstation. The push wrapper also rejects locally authored commit subjects that do not contain Chinese text.
+Maintainers pushing directly to this repository must use the mandatory push wrapper in [OPEN_SOURCE_READINESS.md](OPEN_SOURCE_READINESS.md#mandatory-maintainer-push-check): run `npm run push:check`, then push with `npm run push:maintainer -- origin main` or `npm run push:maintainer -- origin <tag>`. Do not use plain `git push` from a workstation. The push wrapper also rejects locally authored commit subjects that do not contain Chinese text.
 
 ## Reporting Issues
 

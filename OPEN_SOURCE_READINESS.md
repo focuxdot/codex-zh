@@ -21,42 +21,40 @@ Codex-ZH is for Windows users who want:
 
 Source code can be public. Release artifacts need a separate maintainer decision because the Windows installer is built from a user-supplied official Codex app copy and resource-level patches.
 
-## Mandatory Maintainer Push Identity
+## Mandatory Maintainer Push Check
 
-**Stop before every local `git push`: this repository must be pushed as `focuxdot`, not the machine's default GitHub identity.**
+**Stop before every local `git push`: maintainer pushes must use the checked wrapper, not the machine's default GitHub identity.**
 
-On this workstation, the default `github.com` SSH key may authenticate as `brucephaner`, which only has read access to `focuxdot/codex-zh`. Do not run a plain `git push origin main`.
+Do not run a plain `git push origin main` from a workstation.
 
-Required local identity check:
+Required one-time local setup:
+
+```bash
+git config --local codex-zh.githubSshKey /absolute/path/to/maintainer/github/key
+```
+
+If the GitHub login account is not the repository owner, also configure:
+
+```bash
+git config --local codex-zh.githubAccount expected-github-account
+```
+
+Required local check:
 
 ```bash
 npm run push:check
 ```
 
-The check wraps this SSH probe and only accepts this account:
-
-```bash
-ssh -i ~/.ssh/github_focuxdot_account -o IdentitiesOnly=yes -T git@github.com
-```
-
-Expected response:
-
-```text
-Hi focuxdot! You've successfully authenticated, but GitHub does not provide shell access.
-```
-
-If the response says `Hi brucephaner!`, stop and do not push.
-
 Required push command for `main`:
 
 ```bash
-npm run push:focuxdot -- origin main
+npm run push:maintainer -- origin main
 ```
 
 Required push command for release tags:
 
 ```bash
-npm run push:focuxdot -- origin v0.1.2
+npm run push:maintainer -- origin v0.1.2
 ```
 
 After pushing, confirm remote sync:
@@ -66,7 +64,7 @@ git rev-parse HEAD
 git ls-remote origin refs/heads/main
 ```
 
-The two SHAs must match for `main` pushes. `gh auth status` alone is not enough because the GitHub CLI token and the SSH identity can belong to different accounts. The GitHub Actions workflow may push README release-link updates with `github-actions[bot]`; this identity rule is for local maintainer pushes.
+The two SHAs must match for `main` pushes. `gh auth status` alone is not enough because the GitHub CLI token and the SSH identity can belong to different accounts. The GitHub Actions workflow may push README release-link updates with `github-actions[bot]`; this rule is for local maintainer pushes.
 
 ## GitHub Release Packaging
 
@@ -106,7 +104,7 @@ Typical release command:
 
 ```bash
 git tag v0.1.1
-npm run push:focuxdot -- origin v0.1.1
+npm run push:maintainer -- origin v0.1.1
 ```
 
 Before publishing a release:

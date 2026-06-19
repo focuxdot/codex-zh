@@ -11,8 +11,8 @@
     "config": "node scripts/generate-codex-config.mjs",
     "hooks:install": "git config core.hooksPath .githooks",
     "logs:check": "node scripts/validate-chinese-logs.mjs --files",
-    "push:check": "node scripts/git-push-focuxdot.mjs --check",
-    "push:focuxdot": "node scripts/git-push-focuxdot.mjs",
+    "push:check": "node scripts/git-push-maintainer.mjs --check",
+    "push:maintainer": "node scripts/git-push-maintainer.mjs",
     "test-provider": "node scripts/test-provider.mjs",
     "test": "node scripts/run-tests.mjs"
   },
