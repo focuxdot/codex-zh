@@ -243,7 +243,7 @@ jobs:
               --repo $env:GITHUB_REPOSITORY `
               --target $env:GITHUB_SHA `
               --title "Codex-ZH $env:RELEASE_TAG" `
-              --notes "Automated Windows package build for $env:RELEASE_TAG."
+              --notes "Codex-ZH $env:RELEASE_TAG Windows 安装包已自动构建完成。"
             if ($LASTEXITCODE -ne 0) {
               throw "Failed to create release $env:RELEASE_TAG."
             }

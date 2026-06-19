@@ -40,6 +40,8 @@ test("release workflow packages Windows installer after GitHub Release publish",
   assert.match(workflow, /release not found/u);
   assert.match(workflow, /Failed to inspect release \$env:RELEASE_TAG/u);
   assert.match(workflow, /gh release create \$env:RELEASE_TAG/u);
+  assert.match(workflow, /Codex-ZH \$env:RELEASE_TAG Windows 安装包已自动构建完成。/u);
+  assert.doesNotMatch(workflow, /Automated Windows package build/u);
   assert.match(workflow, /gh release upload \$env:RELEASE_TAG @assets --clobber/u);
   assert.match(workflow, /node \.\\scripts\\update-readme-downloads\.mjs/u);
   assert.match(workflow, /git checkout -B main origin\/main/u);
