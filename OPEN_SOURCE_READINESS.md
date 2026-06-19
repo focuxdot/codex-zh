@@ -72,7 +72,7 @@ Repository secrets for automatic release builds:
 | --- | --- | --- |
 | `CODEX_WINDOWS_APP_ZIP_URL` | Yes | Private or public URL to a pinned `.zip` containing one tested official Windows Codex app folder. |
 | `CODEX_WINDOWS_APP_ZIP_SHA256` | Yes | SHA-256 of the source zip. The workflow fails if it does not match. |
-| `CODEX_WINDOWS_APP_LABEL` | Recommended | Installer filename label, for example `OpenAI.Codex-26.608.1337.0`. |
+| `CODEX_WINDOWS_APP_LABEL` | Recommended | Installer filename label, for example `Codex-26.608.1337.0`. |
 
 The source zip must contain a folder with:
 

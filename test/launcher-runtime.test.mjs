@@ -134,9 +134,10 @@ test("installer filename includes the source Codex app label", () => {
   assert.match(installer, /OutputBaseFilename=\{#OutputBaseFilename\}/u);
   assert.match(installerScript, /\[string\]\$SourceCodexLabel = ""/u);
   assert.match(installerScript, /function Get-SourceCodexFileLabel/u);
-  assert.match(installerScript, /OpenAI\.Codex-\$\(\$Matches\[1\]\)/u);
-  assert.match(installerScript, /OpenAI\.Codex-\$major\.\$minor\.\$patch\.0/u);
-  assert.match(installerScript, /\$outputBaseFilename = "\$sourceCodexFileLabel\+Codex-ZH-\$Version-win-x64"/u);
+  assert.match(installerScript, /function ConvertTo-SourceCodexFileLabel/u);
+  assert.ok(installerScript.includes("  $safe = $safe -replace '^OpenAI[._-]+Codex(?=$|[._-])', 'Codex'"));
+  assert.match(installerScript, /Codex-unknown/u);
+  assert.match(installerScript, /\$outputBaseFilename = "\$sourceCodexFileLabel\+ZH-\$Version-win-x64"/u);
   assert.match(installerScript, /\/DOutputBaseFilename=\$outputBaseFilename/u);
   assert.match(installerScript, /\$installer = Join-Path \$OutputDir "\$outputBaseFilename\.exe"/u);
 });

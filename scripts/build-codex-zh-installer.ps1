@@ -54,6 +54,14 @@ function ConvertTo-SafeFileLabel {
   return $safe.Trim(".", "-")
 }
 
+function ConvertTo-SourceCodexFileLabel {
+  param([string]$Label)
+
+  $safe = ConvertTo-SafeFileLabel $Label
+  $safe = $safe -replace '^OpenAI[._-]+Codex(?=$|[._-])', 'Codex'
+  return $safe
+}
+
 function Get-StageManifest {
   $manifestPath = Join-Path $StageRoot "codex-zh-build.json"
   if (!(Test-Path -LiteralPath $manifestPath)) {
@@ -65,14 +73,14 @@ function Get-StageManifest {
 
 function Get-SourceCodexFileLabel {
   if ($SourceCodexLabel) {
-    return ConvertTo-SafeFileLabel $SourceCodexLabel
+    return ConvertTo-SourceCodexFileLabel $SourceCodexLabel
   }
 
   $manifest = Get-StageManifest
   if ($manifest) {
     $sourceAppDir = [string]$manifest.sourceAppDir
     if ($sourceAppDir -match 'OpenAI\.Codex[_\s-]+(\d+\.\d+\.\d+\.\d+)') {
-      return ConvertTo-SafeFileLabel "OpenAI.Codex-$($Matches[1])"
+      return ConvertTo-SourceCodexFileLabel "OpenAI.Codex-$($Matches[1])"
     }
 
     $buildStamp = [string]$manifest.buildStamp
@@ -80,7 +88,7 @@ function Get-SourceCodexFileLabel {
       $major = [int]$Matches[1]
       $minor = [int]$Matches[2]
       $patch = [int]$Matches[3]
-      return ConvertTo-SafeFileLabel "OpenAI.Codex-$major.$minor.$patch.0"
+      return ConvertTo-SourceCodexFileLabel "OpenAI.Codex-$major.$minor.$patch.0"
     }
   }
 
@@ -90,11 +98,11 @@ function Get-SourceCodexFileLabel {
       Sort-Object { [version]$_.Version } -Descending |
       Select-Object -First 1
     if ($package) {
-      return ConvertTo-SafeFileLabel "$($package.Name)-$($package.Version)"
+      return ConvertTo-SourceCodexFileLabel "$($package.Name)-$($package.Version)"
     }
   }
 
-  return "OpenAI.Codex-unknown"
+  return "Codex-unknown"
 }
 
 $Candidates = @(
@@ -113,7 +121,7 @@ if (!$Iscc) {
 }
 
 $sourceCodexFileLabel = Get-SourceCodexFileLabel
-$outputBaseFilename = "$sourceCodexFileLabel+Codex-ZH-$Version-win-x64"
+$outputBaseFilename = "$sourceCodexFileLabel+ZH-$Version-win-x64"
 
 $EffectiveStageRoot = $StageRoot
 if ([System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT) {

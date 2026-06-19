@@ -22,7 +22,7 @@ on:
         required: false
         type: string
       source_codex_label:
-        description: "Optional label used in the installer filename, for example OpenAI.Codex-26.608.1337.0."
+        description: "Optional label used in the installer filename, for example Codex-26.608.1337.0."
         required: false
         type: string
 
