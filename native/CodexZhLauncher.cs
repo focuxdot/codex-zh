@@ -96,6 +96,10 @@ namespace CodexZh
                 case "--configure":
                 case "-configure":
                     return "-Configure";
+                case "--skip-config":
+                case "-skip-config":
+                case "-skipconfig":
+                    return "-SkipConfig";
                 default:
                     return arg;
             }

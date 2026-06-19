@@ -37,6 +37,13 @@ test("launcher carries CodeV runtime repairs without taking over user appearance
   assert.match(launcher, /stream = \$false/u);
   assert.doesNotMatch(launcher, /max_output_tokens = 8/u);
   assert.match(launcher, /Repair-ActiveRouterConfigWireApi/u);
+  assert.match(launcher, /\[switch\]\$SkipConfig/u);
+  assert.match(launcher, /launcher-settings\.json/u);
+  assert.match(launcher, /Test-RouterConfigPromptDisabled/u);
+  assert.match(launcher, /Set-RouterConfigPromptDisabled/u);
+  assert.match(launcher, /routerConfigPromptDisabled/u);
+  assert.match(launcher, /5Lul5ZCO5LiN5YaN5pi\+56S66L\+Z5Liq6YWN572u5by556qX/u);
+  assert.match(launcher, /6Lez6L\+H5pys5qyh/u);
   assert.match(launcher, /Normalize-WireApi/u);
   assert.doesNotMatch(launcher, /wireApi = "chat"/u);
   assert.doesNotMatch(launcher, /Items\.Add\("chat"\)/u);
@@ -82,27 +89,34 @@ test("launcher router config window keeps advanced fields collapsed and API key 
 });
 
 test("launcher keeps connection test separate from primary actions", () => {
-  assert.match(launcher, /\$testButton\.Location = New-Object System\.Drawing\.Point\(48, 372\)/u);
-  assert.match(launcher, /\$cancelButton\.Location = New-Object System\.Drawing\.Point\(332, 372\)/u);
-  assert.match(launcher, /\$saveButton\.Location = New-Object System\.Drawing\.Point\(422, 372\)/u);
-  assert.match(launcher, /\$saveLaunchButton\.Location = New-Object System\.Drawing\.Point\(512, 372\)/u);
-  assert.match(launcher, /\$testButton\.Location = New-Object System\.Drawing\.Point\(48, \$buttonY\)[\s\S]*\$cancelButton\.Location = New-Object System\.Drawing\.Point\(332, \$buttonY\)/u);
+  assert.match(launcher, /\$testButton\.Location = New-Object System\.Drawing\.Point\(48, 406\)/u);
+  assert.match(launcher, /\$skipButton\.Location = New-Object System\.Drawing\.Point\(196, 406\)/u);
+  assert.match(launcher, /\$cancelButton\.Location = New-Object System\.Drawing\.Point\(316, 406\)/u);
+  assert.match(launcher, /\$saveButton\.Location = New-Object System\.Drawing\.Point\(406, 406\)/u);
+  assert.match(launcher, /\$saveLaunchButton\.Location = New-Object System\.Drawing\.Point\(496, 406\)/u);
+  assert.match(launcher, /\$testButton\.Location = New-Object System\.Drawing\.Point\(48, \$buttonY\)[\s\S]*\$skipButton\.Location = New-Object System\.Drawing\.Point\(196, \$buttonY\)[\s\S]*\$cancelButton\.Location = New-Object System\.Drawing\.Point\(316, \$buttonY\)/u);
 });
 
-test("launcher shows router config before runtime initialization when config is missing", () => {
+test("launcher gates first-run router config before runtime initialization", () => {
   const launchFlowStart = launcher.indexOf('throw "Codex.exe not found: $CodexExe"');
   assert.notEqual(launchFlowStart, -1);
   const launchFlow = launcher.slice(launchFlowStart);
   const noLaunchIndex = launchFlow.indexOf("if ($NoLaunch)");
   const noLaunchInitIndex = launchFlow.indexOf("Initialize-CodexZhRuntime", noLaunchIndex);
-  const configGateIndex = launchFlow.indexOf("if ($Configure -or !(Test-ActiveRouterConfig))");
+  const configGateIndex = launchFlow.indexOf("if ($Configure -or ((!(Test-ActiveRouterConfig))");
   const configDialogIndex = launchFlow.indexOf("Show-RouterConfigWindow", configGateIndex);
   const normalInitIndex = launchFlow.indexOf("Initialize-CodexZhRuntime", configGateIndex);
+  const skipConfigIndex = launchFlow.indexOf("$SkipConfig", configGateIndex);
+  const suppressSettingIndex = launchFlow.indexOf("Test-RouterConfigPromptDisabled", configGateIndex);
+  const skipResultIndex = launchFlow.indexOf('$configureResult -eq "skip"', configDialogIndex);
 
   assert.ok(noLaunchIndex >= 0);
   assert.ok(noLaunchInitIndex > noLaunchIndex);
   assert.ok(configGateIndex > noLaunchInitIndex);
+  assert.ok(skipConfigIndex > configGateIndex);
+  assert.ok(suppressSettingIndex > skipConfigIndex);
   assert.ok(configDialogIndex > configGateIndex);
+  assert.ok(skipResultIndex > configDialogIndex);
   assert.ok(normalInitIndex > configDialogIndex);
 });
 
@@ -150,6 +164,8 @@ test("installed shortcuts use native GUI launcher instead of PowerShell", () => 
   assert.match(nativeLauncher, /ProcessWindowStyle\.Hidden/u);
   assert.match(nativeLauncher, /"--configure"/u);
   assert.match(nativeLauncher, /"-Configure"/u);
+  assert.match(nativeLauncher, /"--skip-config"/u);
+  assert.match(nativeLauncher, /"-SkipConfig"/u);
   assert.match(installer, /Filename: "\{app\}\\CodexZhLauncher\.exe"/u);
   assert.match(installer, /Codex 中转站配置"; Filename: "\{app\}\\CodexZhLauncher\.exe"; Parameters: "--configure"/u);
   assert.match(installer, /Codex-ZH Config\.lnk/u);

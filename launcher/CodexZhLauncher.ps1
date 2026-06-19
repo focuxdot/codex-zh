@@ -3,7 +3,8 @@ param(
   [switch]$NoLaunch,
   [switch]$SelfTest,
   [switch]$PrintResult,
-  [switch]$Configure
+  [switch]$Configure,
+  [switch]$SkipConfig
 )
 
 $ErrorActionPreference = "Stop"
@@ -18,6 +19,7 @@ $NodeExe = Join-Path $Root "app\resources\node.exe"
 $ConfigHome = Join-Path $env:USERPROFILE ".codex"
 $CapabilitiesFile = Join-Path $ConfigHome "codex-zh\capabilities.json"
 $ProfileStore = Join-Path $ConfigHome "codex-zh\profiles.json"
+$LauncherSettingsFile = Join-Path $ConfigHome "codex-zh\launcher-settings.json"
 $GlobalStateFile = Join-Path $ConfigHome ".codex-global-state.json"
 $LocalAppData = if ($env:LOCALAPPDATA) { $env:LOCALAPPDATA } else { Join-Path $env:USERPROFILE "AppData\Local" }
 $RoamingAppData = if ($env:APPDATA) { $env:APPDATA } else { Join-Path $env:USERPROFILE "AppData\Roaming" }
@@ -84,6 +86,39 @@ function Backup-InvalidGlobalState {
   }
   $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
   Copy-Item -Force $Path "$Path.invalid-json-$stamp.bak"
+}
+
+function Get-LauncherSettings {
+  if (!(Test-Path $LauncherSettingsFile)) {
+    return [ordered]@{ version = 1; routerConfigPromptDisabled = $false }
+  }
+  try {
+    $settingsText = [System.IO.File]::ReadAllText($LauncherSettingsFile, [System.Text.Encoding]::UTF8)
+    if ([string]::IsNullOrWhiteSpace($settingsText)) {
+      return [ordered]@{ version = 1; routerConfigPromptDisabled = $false }
+    }
+    $settings = $settingsText | ConvertFrom-Json
+    return [ordered]@{
+      version = 1
+      routerConfigPromptDisabled = ($settings.routerConfigPromptDisabled -eq $true)
+    }
+  } catch {
+    return [ordered]@{ version = 1; routerConfigPromptDisabled = $false }
+  }
+}
+
+function Set-RouterConfigPromptDisabled {
+  param([bool]$Disabled)
+  $settings = [ordered]@{
+    version = 1
+    routerConfigPromptDisabled = $Disabled
+  }
+  Write-Utf8NoBom -Path $LauncherSettingsFile -Value (($settings | ConvertTo-Json -Depth 10) + "`n")
+}
+
+function Test-RouterConfigPromptDisabled {
+  $settings = Get-LauncherSettings
+  return ($settings.routerConfigPromptDisabled -eq $true)
 }
 
 function New-CodexDefaultGlobalStateJson {
@@ -841,29 +876,47 @@ function Show-RouterConfigWindow {
   $status.Size = New-Object System.Drawing.Size(580, 44)
   $form.Controls.Add($status)
 
+  $suppressPromptBox = New-Object System.Windows.Forms.CheckBox
+  $suppressPromptBox.Text = ZH "5Lul5ZCO5LiN5YaN5pi+56S66L+Z5Liq6YWN572u5by556qX"
+  $suppressPromptBox.Location = New-Object System.Drawing.Point(48, 374)
+  $suppressPromptBox.Size = New-Object System.Drawing.Size(280, 24)
+  $suppressPromptBox.Checked = Test-RouterConfigPromptDisabled
+  $form.Controls.Add($suppressPromptBox)
+
+  function Save-PromptPreference {
+    Set-RouterConfigPromptDisabled -Disabled $suppressPromptBox.Checked
+  }
+
+  $skipButton = New-Object System.Windows.Forms.Button
+  $skipButton.Text = ZH "6Lez6L+H5pys5qyh"
+  $skipButton.Location = New-Object System.Drawing.Point(196, 406)
+  $skipButton.Size = New-Object System.Drawing.Size(110, 34)
+  $skipButton.Add_Click({ Save-PromptPreference; $form.Tag = "skip"; $form.Close() })
+  $form.Controls.Add($skipButton)
+
   $cancelButton = New-Object System.Windows.Forms.Button
   $cancelButton.Text = ZH "5Y+W5raI"
-  $cancelButton.Location = New-Object System.Drawing.Point(332, 372)
+  $cancelButton.Location = New-Object System.Drawing.Point(316, 406)
   $cancelButton.Size = New-Object System.Drawing.Size(80, 34)
-  $cancelButton.Add_Click({ $form.Tag = "cancel"; $form.Close() })
+  $cancelButton.Add_Click({ Save-PromptPreference; $form.Tag = "cancel"; $form.Close() })
   $form.Controls.Add($cancelButton)
 
   $testButton = New-Object System.Windows.Forms.Button
   $testButton.Text = ZH "5rWL6K+V6L+e5o6l"
-  $testButton.Location = New-Object System.Drawing.Point(48, 372)
+  $testButton.Location = New-Object System.Drawing.Point(48, 406)
   $testButton.Size = New-Object System.Drawing.Size(100, 34)
   $form.Controls.Add($testButton)
 
   $saveButton = New-Object System.Windows.Forms.Button
   $saveButton.Text = ZH "5L+d5a2Y"
-  $saveButton.Location = New-Object System.Drawing.Point(422, 372)
+  $saveButton.Location = New-Object System.Drawing.Point(406, 406)
   $saveButton.Size = New-Object System.Drawing.Size(80, 34)
   $form.Controls.Add($saveButton)
 
   $saveLaunchButton = New-Object System.Windows.Forms.Button
   $saveLaunchButton.Text = ZH "5L+d5a2Y5bm25ZCv5Yqo"
-  $saveLaunchButton.Location = New-Object System.Drawing.Point(512, 372)
-  $saveLaunchButton.Size = New-Object System.Drawing.Size(116, 34)
+  $saveLaunchButton.Location = New-Object System.Drawing.Point(496, 406)
+  $saveLaunchButton.Size = New-Object System.Drawing.Size(132, 34)
   $form.Controls.Add($saveLaunchButton)
 
   $advancedControls = @($providerLabel, $providerBox, $nameLabel, $nameBox, $wireLabel, $wireBox)
@@ -872,16 +925,19 @@ function Show-RouterConfigWindow {
     foreach ($control in $advancedControls) {
       $control.Visible = $Visible
     }
-    $form.ClientSize = if ($Visible) { New-Object System.Drawing.Size(660, 540) } else { New-Object System.Drawing.Size(660, 420) }
+    $form.ClientSize = if ($Visible) { New-Object System.Drawing.Size(660, 580) } else { New-Object System.Drawing.Size(660, 454) }
     $contentY = if ($Visible) { 424 } else { 292 }
     $statusY = if ($Visible) { 458 } else { 326 }
-    $buttonY = if ($Visible) { 492 } else { 372 }
+    $suppressY = if ($Visible) { 506 } else { 374 }
+    $buttonY = if ($Visible) { 532 } else { 406 }
     $hint.Location = New-Object System.Drawing.Point(48, $contentY)
     $status.Location = New-Object System.Drawing.Point(48, $statusY)
+    $suppressPromptBox.Location = New-Object System.Drawing.Point(48, $suppressY)
     $testButton.Location = New-Object System.Drawing.Point(48, $buttonY)
-    $cancelButton.Location = New-Object System.Drawing.Point(332, $buttonY)
-    $saveButton.Location = New-Object System.Drawing.Point(422, $buttonY)
-    $saveLaunchButton.Location = New-Object System.Drawing.Point(512, $buttonY)
+    $skipButton.Location = New-Object System.Drawing.Point(196, $buttonY)
+    $cancelButton.Location = New-Object System.Drawing.Point(316, $buttonY)
+    $saveButton.Location = New-Object System.Drawing.Point(406, $buttonY)
+    $saveLaunchButton.Location = New-Object System.Drawing.Point(496, $buttonY)
   }
   $advancedToggle.Add_CheckedChanged({ Set-AdvancedVisible $advancedToggle.Checked })
   Set-AdvancedVisible $false
@@ -965,6 +1021,7 @@ function Show-RouterConfigWindow {
     try {
       $input = Read-FormInput
       Save-RouterProfile -Provider $input.provider -ProviderName $input.providerName -BaseUrl $input.baseUrl -Model $input.model -WireApi $input.wireApi -ApiKey $input.apiKey -LastTestOk $false
+      Save-PromptPreference
       $status.ForeColor = [System.Drawing.Color]::DarkGreen
       $status.Text = ZH "5bey5L+d5a2Y6YWN572u44CC"
       $form.Tag = "saved"
@@ -979,6 +1036,7 @@ function Show-RouterConfigWindow {
       try {
         $input = Read-FormInput
         Save-RouterProfile -Provider $input.provider -ProviderName $input.providerName -BaseUrl $input.baseUrl -Model $input.model -WireApi $input.wireApi -ApiKey $input.apiKey -LastTestOk $true
+        Save-PromptPreference
         $form.Tag = "launch"
         $form.Close()
       } catch {
@@ -1024,9 +1082,9 @@ if ($NoLaunch) {
   exit 0
 }
 
-if ($Configure -or !(Test-ActiveRouterConfig)) {
+if ($Configure -or ((!(Test-ActiveRouterConfig)) -and !$SkipConfig -and !(Test-RouterConfigPromptDisabled))) {
   $configureResult = Show-RouterConfigWindow
-  if ($configureResult -ne "launch") {
+  if (($configureResult -ne "launch") -and !((!$Configure) -and ($configureResult -eq "skip"))) {
     $result = New-Result -Status "ready" -Reason "configured"
     if ($PrintResult) {
       $result | ConvertTo-Json -Compress
