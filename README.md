@@ -21,18 +21,18 @@ Codex-ZH 是 OpenAI Codex 的中文汉化定制版，面向国内 Windows 用户
 ## 下载
 
 <!-- codex-zh-downloads:start -->
-当前最新版：v0.1.1
+当前最新版：v0.1.2
 
 | 你的系统 | 下载哪个版本 |
 | --- | --- |
-| Windows 10 / Windows 11（64 位） | [下载 Codex-ZH 0.1.1 Windows x64 安装包](https://github.com/focuxdot/codex-zh/releases/download/v0.1.1/OpenAI.Codex-26.608.1337.0%2BCodex-ZH-0.1.1-win-x64.exe) |
+| Windows 10 / Windows 11（64 位） | [下载 Codex-ZH 0.1.2 Windows x64 安装包](https://github.com/focuxdot/codex-zh/releases/download/v0.1.2/Codex-26.608.1337.0%2BZH-0.1.2-win-x64.exe) |
 | macOS | 暂不提供 Codex-ZH 安装包，不要下载 Windows 版 |
 | Linux | 暂不提供 Codex-ZH 安装包，不要下载 Windows 版 |
 
 普通用户只需要下载上面的 `.exe` 文件。不要下载 GitHub 页面里的 `Source code`，那是源码，不是安装包。
 
-校验文件：[`OpenAI.Codex-26.608.1337.0+Codex-ZH-0.1.1-win-x64.exe.sha256`](https://github.com/focuxdot/codex-zh/releases/download/v0.1.1/OpenAI.Codex-26.608.1337.0%2BCodex-ZH-0.1.1-win-x64.exe.sha256)  
-SHA256：`473b30eb8d1e450fc21f8899bbe7c10b74a62a27ec4cf38786a66795ec352711`
+校验文件：[`Codex-26.608.1337.0+ZH-0.1.2-win-x64.exe.sha256`](https://github.com/focuxdot/codex-zh/releases/download/v0.1.2/Codex-26.608.1337.0%2BZH-0.1.2-win-x64.exe.sha256)  
+SHA256：`318e452c097d2d171f2e1dd912b41339fd9652d8372d67d1425cf6f22f7f440c`
 <!-- codex-zh-downloads:end -->
 
 ## 快速开始
