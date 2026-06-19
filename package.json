@@ -9,6 +9,8 @@
     "activate-config": "node scripts/activate-provider-config.mjs",
     "activate-profile": "node scripts/activate-provider-profile.mjs",
     "config": "node scripts/generate-codex-config.mjs",
+    "hooks:install": "git config core.hooksPath .githooks",
+    "logs:check": "node scripts/validate-chinese-logs.mjs --files",
     "push:check": "node scripts/git-push-focuxdot.mjs --check",
     "push:focuxdot": "node scripts/git-push-focuxdot.mjs",
     "test-provider": "node scripts/test-provider.mjs",

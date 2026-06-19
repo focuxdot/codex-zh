@@ -7,6 +7,9 @@ const packageJson = readFileSync("package.json", "utf8");
 const readiness = readFileSync("OPEN_SOURCE_READINESS.md", "utf8");
 const contributing = readFileSync("CONTRIBUTING.md", "utf8");
 const focuxdotPush = readFileSync("scripts/git-push-focuxdot.mjs", "utf8");
+const chineseLogs = readFileSync("scripts/validate-chinese-logs.mjs", "utf8");
+const releaseNotes = readFileSync("scripts/generate-release-notes.mjs", "utf8");
+const changelog = readFileSync("CHANGELOG.md", "utf8");
 
 test("release workflow packages Windows installer after GitHub Release publish", () => {
   assert.match(workflow, /push:\s*\n\s+tags:\s*\n\s+- "v\*"/u);
@@ -39,13 +42,17 @@ test("release workflow packages Windows installer after GitHub Release publish",
   assert.match(workflow, /\$releaseViewOutput = & gh release view \$env:RELEASE_TAG/u);
   assert.match(workflow, /release not found/u);
   assert.match(workflow, /Failed to inspect release \$env:RELEASE_TAG/u);
+  assert.match(workflow, /generate-release-notes\.mjs/u);
+  assert.match(workflow, /\$releaseNotesPath = Join-Path \$env:RUNNER_TEMP "codex-zh-release-notes\.md"/u);
   assert.match(workflow, /gh release create \$env:RELEASE_TAG/u);
-  assert.match(workflow, /Codex-ZH \$env:RELEASE_TAG Windows 安装包已自动构建完成。/u);
+  assert.match(workflow, /--notes-file \$releaseNotesPath/u);
   assert.doesNotMatch(workflow, /Automated Windows package build/u);
+  assert.doesNotMatch(workflow, /安装包已自动构建完成/u);
   assert.match(workflow, /gh release upload \$env:RELEASE_TAG @assets --clobber/u);
   assert.match(workflow, /node \.\\scripts\\update-readme-downloads\.mjs/u);
   assert.match(workflow, /git checkout -B main origin\/main/u);
-  assert.match(workflow, /docs: update README download links for \$env:RELEASE_TAG/u);
+  assert.match(workflow, /docs: 更新 \$env:RELEASE_TAG 下载链接/u);
+  assert.doesNotMatch(workflow, /docs: update README download links/u);
   assert.match(workflow, /git push origin HEAD:main/u);
 });
 
@@ -64,6 +71,7 @@ test("maintainer push docs require the focuxdot SSH identity wrapper", () => {
   assert.match(focuxdotPush, /git@github\\.com:focuxdot\\\/codex-zh/u);
   assert.match(focuxdotPush, /Hi \$\{EXPECTED_ACCOUNT\}!/u);
   assert.match(focuxdotPush, /Refusing to push: GitHub SSH identity is not/u);
+  assert.match(focuxdotPush, /validate-chinese-logs\.mjs", "--commit-range", "origin\/main\.\.HEAD"/u);
   assert.match(focuxdotPush, /GIT_SSH_COMMAND/u);
   assert.match(readiness, /Do not run a plain `git push origin main`/u);
   assert.match(readiness, /npm run push:check/u);
@@ -71,4 +79,19 @@ test("maintainer push docs require the focuxdot SSH identity wrapper", () => {
   assert.match(readiness, /npm run push:focuxdot -- origin v0\.1\.2/u);
   assert.match(readiness, /gh auth status` alone is not enough/u);
   assert.match(contributing, /Do not use plain `git push` from a workstation/u);
+});
+
+test("logs and release-facing copy default to Chinese", () => {
+  assert.match(packageJson, /"hooks:install": "git config core\.hooksPath \.githooks"/u);
+  assert.match(packageJson, /"logs:check": "node scripts\/validate-chinese-logs\.mjs --files"/u);
+  assert.match(chineseLogs, /CHANGELOG bullet must be Chinese/u);
+  assert.match(chineseLogs, /release workflow must generate user-facing release notes from CHANGELOG\.md/u);
+  assert.match(releaseNotes, /CHANGELOG\.md must include a Chinese release section/u);
+  assert.match(contributing, /Commit subjects[\s\S]+must be Chinese/u);
+  assert.match(contributing, /CHANGELOG entries, GitHub Release notes, README release sections, and new-feature descriptions must be Chinese/u);
+  assert.match(contributing, /GitHub Release notes are generated from the matching `CHANGELOG\.md` version section/u);
+  assert.match(readiness, /GitHub Release notes must describe user-visible features and fixes, not build status/u);
+  for (const line of changelog.split(/\r?\n/u).filter((entry) => entry.trim().startsWith("- "))) {
+    assert.match(line, /[\u3400-\u9fff]/u);
+  }
 });

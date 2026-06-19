@@ -38,9 +38,20 @@ npm run config -- --preset openrouter --model openai/gpt-4.1 --api-key-env OPENR
 3. Run `npm test` before opening a PR.
 4. Update README or docs when changing user-visible behavior.
 
+## Chinese Logs
+
+Codex-ZH faces Chinese-speaking users, so future logs and release-facing copy should use Simplified Chinese by default.
+
+- Commit subjects should keep technical prefixes when useful, but the description must be Chinese, for example `feat: 启动弹窗支持跳过` or `fix: 修复配置向导按钮布局`.
+- CHANGELOG entries, GitHub Release notes, README release sections, and new-feature descriptions must be Chinese.
+- GitHub Release notes are generated from the matching `CHANGELOG.md` version section, so add user-facing bullets under `## vX.Y.Z` before tagging a release.
+- Technical identifiers such as file names, commands, API names, model names, versions, and provider IDs can remain English.
+- Run `npm run logs:check` before publishing user-facing changes.
+- Run `npm run hooks:install` once per checkout to enable the local `commit-msg` hook.
+
 ## Maintainer Pushes
 
-Maintainers pushing directly to `focuxdot/codex-zh` must use the mandatory push wrapper in [OPEN_SOURCE_READINESS.md](OPEN_SOURCE_READINESS.md#mandatory-maintainer-push-identity): run `npm run push:check`, then push with `npm run push:focuxdot -- origin main` or `npm run push:focuxdot -- origin <tag>`. Do not use plain `git push` from a workstation.
+Maintainers pushing directly to `focuxdot/codex-zh` must use the mandatory push wrapper in [OPEN_SOURCE_READINESS.md](OPEN_SOURCE_READINESS.md#mandatory-maintainer-push-identity): run `npm run push:check`, then push with `npm run push:focuxdot -- origin main` or `npm run push:focuxdot -- origin <tag>`. Do not use plain `git push` from a workstation. The push wrapper also rejects locally authored commit subjects that do not contain Chinese text.
 
 ## Reporting Issues
 

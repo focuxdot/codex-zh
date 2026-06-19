@@ -28,6 +28,8 @@ try {
     throw new Error("Usage: npm run push:focuxdot -- origin main");
   }
 
+  validateChineseCommitSubjects();
+
   const result = spawnSync("git", ["push", ...pushArgs], {
     env: {
       ...process.env,
@@ -39,6 +41,15 @@ try {
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));
   process.exit(1);
+}
+
+function validateChineseCommitSubjects() {
+  const result = spawnSync(process.execPath, ["scripts/validate-chinese-logs.mjs", "--commit-range", "origin/main..HEAD"], {
+    stdio: "inherit",
+  });
+  if (result.status !== 0) {
+    throw new Error("Refusing to push: commit subjects must use Chinese descriptions.");
+  }
 }
 
 function verifyKeyFile() {

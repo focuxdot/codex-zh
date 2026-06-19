@@ -72,6 +72,8 @@ The two SHAs must match for `main` pushes. `gh auth status` alone is not enough 
 
 GitHub Actions can build the Windows installer automatically after a version tag is pushed or a GitHub Release is published. The workflow is `.github/workflows/release.yml`.
 
+Release copy is user-facing and must be Simplified Chinese by default. GitHub Release notes must describe user-visible features and fixes, not build status. The workflow generates Release notes from the matching `CHANGELOG.md` section such as `## v0.1.2`; missing or non-Chinese bullets should block the release. Technical names such as `Codex.exe`, provider IDs, commands, versions, and file names may remain English.
+
 Repository secrets for automatic release builds:
 
 | Secret | Required | Purpose |
@@ -110,6 +112,8 @@ npm run push:focuxdot -- origin v0.1.1
 Before publishing a release:
 
 - Run `npm test`.
+- Run `npm run logs:check`.
+- Add a Chinese `CHANGELOG.md` section for the version being tagged.
 - Confirm the release packaging workflow can access the pinned official Codex app source zip and matching SHA-256.
 - Verify `codex.exe doctor --summary --ascii --no-color` returns `0 fail`.
 - Verify Simplified Chinese defaults.

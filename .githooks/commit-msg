@@ -1,0 +1,2 @@
+#!/bin/sh
+node scripts/validate-chinese-logs.mjs --commit-file "$1"

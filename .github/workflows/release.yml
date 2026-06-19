@@ -233,6 +233,11 @@ jobs:
           if ($releaseViewExitCode -eq 0) {
             Write-Host "Release $env:RELEASE_TAG already exists."
           } else {
+            $releaseNotesPath = Join-Path $env:RUNNER_TEMP "codex-zh-release-notes.md"
+            node .\scripts\generate-release-notes.mjs `
+              --tag $env:RELEASE_TAG `
+              --out $releaseNotesPath
+
             $releaseViewText = $releaseViewOutput -join "`n"
             if ($releaseViewText -notmatch "release not found") {
               $releaseViewOutput | ForEach-Object { Write-Host $_ }
@@ -243,7 +248,7 @@ jobs:
               --repo $env:GITHUB_REPOSITORY `
               --target $env:GITHUB_SHA `
               --title "Codex-ZH $env:RELEASE_TAG" `
-              --notes "Codex-ZH $env:RELEASE_TAG Windows 安装包已自动构建完成。"
+              --notes-file $releaseNotesPath
             if ($LASTEXITCODE -ne 0) {
               throw "Failed to create release $env:RELEASE_TAG."
             }
@@ -287,6 +292,6 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add README.md
-          git commit -m "docs: update README download links for $env:RELEASE_TAG"
+          git commit -m "docs: 更新 $env:RELEASE_TAG 下载链接"
           git push origin HEAD:main
           $global:LASTEXITCODE = 0
