@@ -78,7 +78,9 @@ curl https://relay.wokey.ai/   # 验证：应返回 "codex-zh relay ok"
 - 手机端 PWA（可安装、离线壳）、多电脑切换、断线自动重连、回前台立即重连
 - 电源管理：有设备在线或任务运行时阻止系统睡眠（允许关屏），空闲释放。`--no-prevent-sleep` 关闭
 - webhook 通知：任务完成（无设备在线时）/ 需要审批时推到 Bark / Server酱 / 企业微信 / 钉钉 / 自定义渠道，仅摘要不含命令
+- 协议版本化：relay 转发（URL `/v1/`）、E2E 信封、应用协议（auth 交换）三层独立版本，daemon 更新时提示手机刷新
+- 自建 relay 文档：见 [relay-worker/README.md](relay-worker/README.md)
 
-未实现（r0.5 剩余 / r0.6）：
-- 桌面托盘与本机管理页、协议版本化、wrangler 自部署文档
+未实现（r0.6）：
+- 桌面托盘与本机管理页
 - Windows 安装器集成（可选组件、开机自启、崩溃自动拉起）

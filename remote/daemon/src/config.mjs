@@ -9,6 +9,10 @@ import { generateKeyPair, randomId, randomToken } from "./crypto.mjs";
 
 export const PAIR_TOKEN_TTL_MS = 5 * 60 * 1000;
 
+// 应用层协议版本（daemon ↔ client）。relay 转发协议版本另见 URL 的 /v1/ 前缀。
+// 不兼容变更时递增：daemon 与 client 在 auth 握手交换，一端过旧则提示升级。
+export const APP_PROTOCOL = 1;
+
 export function defaultConfigPath() {
   return join(homedir(), ".codex-zh", "remote", "daemon.json");
 }

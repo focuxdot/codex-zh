@@ -1,7 +1,13 @@
 // 单个远端设备连接的 E2E 会话：握手 -> 鉴权 -> 方法路由（见 PROTOCOL.md §2/§3）
 import { statSync } from "node:fs";
 
-import { consumePairToken, findDeviceByToken, loadOrCreateConfig, saveConfig } from "./config.mjs";
+import {
+  APP_PROTOCOL,
+  consumePairToken,
+  findDeviceByToken,
+  loadOrCreateConfig,
+  saveConfig,
+} from "./config.mjs";
 import { deriveSessionKey, open as sealedOpen, seal } from "./crypto.mjs";
 import { RolloutTail } from "./rollout-tail.mjs";
 
@@ -148,6 +154,7 @@ export class ClientSession {
         deviceId: paired.device.deviceId,
         deviceToken: paired.deviceToken,
         daemonName: paired.config.daemonName,
+        protocol: APP_PROTOCOL,
       });
       this.#daemon.hub.registerClient(this);
       this.#daemon.log(`新设备配对成功: ${paired.device.deviceId}`);
@@ -169,6 +176,7 @@ export class ClientSession {
         deviceId: device.deviceId,
         deviceToken: params.deviceToken,
         daemonName: this.#daemon.config.daemonName,
+        protocol: APP_PROTOCOL,
       });
       this.#daemon.hub.registerClient(this);
       return;

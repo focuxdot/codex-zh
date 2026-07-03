@@ -53,11 +53,13 @@ JSON-RPC 风格：请求 `{"id",method,"params"}`，响应 `{"id","result"| "err
 ### 3.1 鉴权（连接后第一条，其余消息在鉴权前一律拒绝）
 
 ```json
-{"id":1,"method":"auth","params":{"pairToken":"..."}}        // 首次配对
-{"id":1,"method":"auth","params":{"deviceToken":"..."}}      // 已配对设备
+{"id":1,"method":"auth","params":{"pairToken":"...","protocol":1}}    // 首次配对
+{"id":1,"method":"auth","params":{"deviceToken":"...","protocol":1}}  // 已配对设备
 ```
 
-成功：`{"id":1,"result":{"deviceId":"...","deviceToken":"...","daemonName":"..."}}`（配对路径签发新 deviceToken；deviceToken 路径原样确认）。失败：error 后 daemon 发 `{"t":"close"}` 断开。
+成功：`{"id":1,"result":{"deviceId":"...","deviceToken":"...","daemonName":"...","protocol":1}}`（配对路径签发新 deviceToken；deviceToken 路径原样确认）。失败：error 后 daemon 发 `{"t":"close"}` 断开。
+
+双方在 auth 交换应用协议版本（见 §5）。client 若发现 daemon 的 `protocol` 更高，提示用户刷新页面（PWA 拉取新代码）。
 
 - pairToken：一次性、5 分钟时效，由 `pair` 命令生成；daemon 只存哈希。
 - deviceToken：32 字节随机 base64url，daemon 只存 SHA-256 哈希与设备元数据（名称、创建时间、最后活跃）。
@@ -137,5 +139,11 @@ client 解析后连接 relay、完成 §2 握手、以 `tok` 走 §3.1 配对，
 
 ## 5. 版本
 
-- 转发帧与信封含 `v:1`（信封仅首帧携带）；不兼容变更递增版本。
-- relay 对未知 `t` 帧忽略不断开，保证旧 relay 兼容新端。
+三层各自独立版本化，允许 daemon / PWA / relay 分别升级：
+
+- **relay 转发协议**：连接 URL 前缀 `/v1/`（如 `/v1/daemon/<id>`）。不兼容改动用 `/v2/`；官方 relay 需同时挂载新旧 path，旧 daemon 连 `/v1/` 继续可用。relay 对未知 `t` 帧忽略不断开，保证旧 relay 兼容新端加的帧类型。
+- **E2E 信封格式**：首帧 `v:1`（见 §2）。加密握手格式变更时递增。
+- **应用协议**（daemon ↔ client）：常量 `APP_PROTOCOL`，在 §3.1 auth 双向交换。
+  - client 发现 `daemon.protocol > 自己` → 提示刷新页面（PWA 自动拉新代码，成本低）。
+  - daemon 遇到更高的 client protocol → 按自己能力响应（向前兼容：客户端不应假设新方法存在）。
+  - 新增方法/字段属兼容变更，不递增；仅当移除或改变既有语义时递增。

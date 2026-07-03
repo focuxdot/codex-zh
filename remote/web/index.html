@@ -147,6 +147,7 @@ const b64 = {
 };
 const AAD_C2D = enc.encode("czr1:c2d");
 const AAD_D2C = enc.encode("czr1:d2c");
+const APP_PROTOCOL = 1; // 应用层协议版本，与 daemon 交换（见 PROTOCOL.md §5）
 
 // —— 多电脑存储：czr-daemons = { [id]: {relay,id,pk,name,deviceToken} }，czr-active = id ——
 function loadStore() {
@@ -312,14 +313,18 @@ class Session {
     });
     ws.onmessage = (e) => this.onFrame(JSON.parse(e.data));
     ws.onclose = () => this.#onClose();
-    // 首次用配对码，之后一律用设备令牌
+    // 首次用配对码，之后一律用设备令牌；带上本端协议版本
     const authParams = this.info.fromPair
-      ? { pairToken: this.info.tok }
-      : { deviceToken: this.info.deviceToken };
+      ? { pairToken: this.info.tok, protocol: APP_PROTOCOL }
+      : { deviceToken: this.info.deviceToken, protocol: APP_PROTOCOL };
     const auth = await this.request("auth", authParams);
     if (auth.deviceToken) {
       this.info = { ...this.info, fromPair: false, deviceToken: auth.deviceToken, name: auth.daemonName };
       saveDaemon(this.info); // 配对成功即入库并设为活跃
+    }
+    // 电脑端协议更新：PWA 可能缓存了旧代码，提示刷新拿新版
+    if (auth.protocol > APP_PROTOCOL) {
+      showBanner("电脑端 Remote 已更新，请下拉刷新页面以获取新版本");
     }
     this.reconnectAttempt = 0;
     this.onReady(auth);
