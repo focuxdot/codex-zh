@@ -5,12 +5,13 @@ import { RolloutTail } from "./rollout-tail.mjs";
 
 export class ClientSession {
   #cid;
-  #daemon; // { config, configPath, privateKey, appServer, log }
+  #daemon; // { config, configPath, privateKey, appServer, hub, log }
   #send; // (data) => void  发送 E2E 信封给该 client
   #close; // () => void     要求 relay 断开该 client
   #key = null;
   #device = null;
   #tail = null;
+  #watchedThreadId = null;
 
   constructor(cid, daemon, { send, close }) {
     this.#cid = cid;
@@ -65,10 +66,55 @@ export class ClientSession {
         await this.#watch(message);
         return;
       case "session.unwatch":
-        this.#tail?.close();
-        this.#tail = null;
+        this.#stopWatch();
         this.#reply(message.id, { ok: true });
         return;
+      case "session.send": {
+        const { sessionId, text } = message.params ?? {};
+        if (!sessionId || !text?.trim()) {
+          this.#reply(message.id, null, { code: 400, message: "缺少 sessionId 或 text" });
+          return;
+        }
+        try {
+          const res = await this.#daemon.hub.sendMessage(sessionId, text, this);
+          this.#reply(message.id, res);
+        } catch (err) {
+          this.#reply(message.id, null, { code: 500, message: `发送失败: ${err.message}` });
+        }
+        return;
+      }
+      case "turn.interrupt": {
+        const { sessionId } = message.params ?? {};
+        try {
+          this.#reply(message.id, await this.#daemon.hub.interrupt(sessionId));
+        } catch (err) {
+          this.#reply(message.id, null, { code: 500, message: err.message });
+        }
+        return;
+      }
+      case "session.new": {
+        const cwd = message.params?.cwd;
+        if (cwd && !this.#daemon.isCwdAllowed(cwd)) {
+          this.#reply(message.id, null, { code: 403, message: "该目录不在允许列表中" });
+          return;
+        }
+        try {
+          this.#reply(message.id, await this.#daemon.hub.newThread(cwd));
+        } catch (err) {
+          this.#reply(message.id, null, { code: 500, message: `新建失败: ${err.message}` });
+        }
+        return;
+      }
+      case "approval.respond": {
+        const { approvalKey, decision } = message.params ?? {};
+        const allowed = ["accept", "acceptForSession", "decline", "cancel"];
+        if (!allowed.includes(decision)) {
+          this.#reply(message.id, null, { code: 400, message: "非法审批决定" });
+          return;
+        }
+        this.#reply(message.id, this.#daemon.hub.respondApproval(approvalKey, decision, this));
+        return;
+      }
       default:
         this.#reply(message.id, null, { code: 400, message: `未知方法: ${message.method}` });
     }
@@ -124,13 +170,42 @@ export class ClientSession {
       this.#reply(message.id, null, { code: 404, message: "会话不存在" });
       return;
     }
-    this.#tail?.close();
+    this.#stopWatch();
+    this.#watchedThreadId = sessionId;
+    // 历史与增量走 rollout 文件 tail；实时流式事件（发消息后的增量输出、
+    // 审批）走 app-server 事件，由 hub 推送。二者互补。
+    this.#daemon.hub.subscribe(sessionId, this);
     this.#tail = new RolloutTail(thread.path, {
       onItems: (items, { snapshot }) => this.#sendItems(sessionId, items, snapshot),
       onError: (err) => this.#daemon.log(`tail ${sessionId} 失败: ${err.message}`),
     });
     this.#reply(message.id, { ok: true });
     await this.#tail.start();
+  }
+
+  #stopWatch() {
+    this.#tail?.close();
+    this.#tail = null;
+    if (this.#watchedThreadId) {
+      this.#daemon.hub.unsubscribe(this.#watchedThreadId, this);
+      this.#watchedThreadId = null;
+    }
+  }
+
+  // —— hub 推送入口 ——
+  pushLiveEvent(sessionId, method, params) {
+    this.#notify("session.live", { sessionId, event: method, params });
+  }
+
+  pushApproval(approvalKey, sessionId, method, params) {
+    this.#notify("approval.request", {
+      approvalKey,
+      sessionId,
+      kind: /fileChange|Patch/.test(method) ? "fileChange" : "command",
+      command: params?.command ?? null,
+      cwd: params?.cwd ?? null,
+      reason: params?.reason ?? null,
+    });
   }
 
   // 分块发送，保证每帧不超过 relay 的 256KiB 上限：
@@ -181,7 +256,7 @@ export class ClientSession {
   }
 
   dispose() {
-    this.#tail?.close();
-    this.#tail = null;
+    this.#stopWatch();
+    this.#daemon.hub?.removeClient(this);
   }
 }

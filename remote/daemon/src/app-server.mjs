@@ -12,6 +12,9 @@ export class AppServer {
   #log;
   #closed = false;
 
+  onNotification = () => {}; // (method, params)
+  onServerRequest = () => {}; // (id, method, params) —— 审批等，需调用 respond(id, result)
+
   constructor({ command = "codex", port = 19271, log = () => {} } = {}) {
     this.#command = command;
     this.#port = port;
@@ -77,6 +80,14 @@ export class AppServer {
     await this.request("initialize", {
       clientInfo: { name: "codex-zh-remote-daemon", version: "0.1.0" },
     });
+    // 握手收尾：app-server 需收到 initialized 通知后才服务会话级方法
+    // （thread/resume、thread/start、turn/start）；缺此步这些请求会挂起超时。
+    this.notify("initialized", {});
+  }
+
+  notify(method, params = {}) {
+    if (!this.#ws) return;
+    this.#ws.send(JSON.stringify({ jsonrpc: "2.0", method, params }));
   }
 
   #onMessage(raw) {
@@ -86,13 +97,42 @@ export class AppServer {
     } catch {
       return;
     }
+    // 我方请求的响应
     if (msg.id !== undefined && this.#pending.has(msg.id)) {
       const { resolve, reject } = this.#pending.get(msg.id);
       this.#pending.delete(msg.id);
       if (msg.error) reject(new Error(msg.error.message ?? "app-server 错误"));
       else resolve(msg.result);
+      return;
     }
-    // 服务端主动请求（审批等）与通知在 r0.4 处理
+    // 服务端主动请求（有 id + method）：审批等，需要我方回 response
+    if (msg.id !== undefined && msg.method) {
+      try {
+        this.onServerRequest(msg.id, msg.method, msg.params ?? {});
+      } catch (err) {
+        this.#log(`处理服务端请求失败: ${err.message}`);
+      }
+      return;
+    }
+    // 通知（有 method 无 id）
+    if (msg.method) {
+      try {
+        this.onNotification(msg.method, msg.params ?? {});
+      } catch (err) {
+        this.#log(`处理通知失败: ${err.message}`);
+      }
+    }
+  }
+
+  // 应答服务端请求（审批决定）
+  respond(id, result) {
+    if (!this.#ws) return;
+    this.#ws.send(JSON.stringify({ jsonrpc: "2.0", id, result }));
+  }
+
+  respondError(id, code, message) {
+    if (!this.#ws) return;
+    this.#ws.send(JSON.stringify({ jsonrpc: "2.0", id, error: { code, message } }));
   }
 
   request(method, params = {}, timeoutMs = 15000) {
@@ -124,6 +164,32 @@ export class AppServer {
       status: t.status?.type ?? "unknown",
       path: t.path ?? null,
     }));
+  }
+
+  // 会话级方法可能因模型初始化/网络（如国内访问模型列表）而较慢，
+  // 用更长的超时；实测 resume 在网络不佳时约 16s。
+  #SESSION_TIMEOUT = 90000;
+
+  // 恢复会话到本 app-server 实例（幂等，daemon 侧去重）
+  resumeThread(threadId, overrides = {}) {
+    return this.request("thread/resume", { threadId, ...overrides }, this.#SESSION_TIMEOUT);
+  }
+
+  // 发起一轮对话，返回 { turnId? }
+  startTurn(threadId, text, overrides = {}) {
+    return this.request(
+      "turn/start",
+      { threadId, input: [{ type: "text", text }], ...overrides },
+      this.#SESSION_TIMEOUT,
+    );
+  }
+
+  interruptTurn(threadId, turnId) {
+    return this.request("turn/interrupt", { threadId, turnId });
+  }
+
+  startThread(params = {}) {
+    return this.request("thread/start", params, this.#SESSION_TIMEOUT);
   }
 
   stop() {

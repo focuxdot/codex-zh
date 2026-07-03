@@ -16,6 +16,8 @@ import {
 } from "./config.mjs";
 import { privateKeyFromPem } from "./crypto.mjs";
 import { RelayLink } from "./relay-link.mjs";
+import { SessionHub } from "./session-hub.mjs";
+import { resolve as resolvePath } from "node:path";
 
 function log(message) {
   console.log(`[${new Date().toISOString()}] ${message}`);
@@ -43,12 +45,24 @@ export async function startDaemon({ configPath, overrides = {} }) {
   await appServer.start();
   log(`codex app-server 就绪: ${appServer.url}`);
 
+  const hub = new SessionHub(appServer, { log });
   const daemonContext = {
     config,
     configPath,
     privateKey: privateKeyFromPem(config.privateKeyPem),
     appServer,
+    hub,
     log,
+    // 新建会话的目录白名单：未配置则允许任意（r0.6 安装器会写入默认白名单）
+    isCwdAllowed(cwd) {
+      const allow = config.allowedCwds;
+      if (!Array.isArray(allow) || allow.length === 0) return true;
+      const target = resolvePath(cwd);
+      return allow.some((base) => {
+        const b = resolvePath(base);
+        return target === b || target.startsWith(`${b}/`);
+      });
+    },
   };
 
   const sessions = new Map(); // cid -> ClientSession

@@ -62,7 +62,7 @@ JSON-RPC 风格：请求 `{"id",method,"params"}`，响应 `{"id","result"| "err
 - pairToken：一次性、5 分钟时效，由 `pair` 命令生成；daemon 只存哈希。
 - deviceToken：32 字节随机 base64url，daemon 只存 SHA-256 哈希与设备元数据（名称、创建时间、最后活跃）。
 
-### 3.2 会话
+### 3.2 会话查看
 
 ```json
 {"id":2,"method":"sessions.list","params":{"limit":50}}
@@ -72,12 +72,42 @@ JSON-RPC 风格：请求 `{"id",method,"params"}`，响应 `{"id","result"| "err
 // result: {"ok":true}；随后：
 //   {"method":"session.snapshot","params":{"sessionId","items":[...]}}   // 尾部回填
 //   {"method":"session.event","params":{"sessionId","items":[...]}}      // 增量追加
+//   {"method":"session.live","params":{"sessionId","event","params"}}    // app-server 实时事件
 {"id":4,"method":"session.unwatch","params":{}}
 ```
 
 `items` 为 rollout JSONL 行解析后的对象（`{timestamp,type,payload}`），client 侧按类型渲染，未知类型显示摘要。每 client 连接同一时刻只 watch 一个会话。
 
-### 3.3 心跳
+`session.live` 转发 app-server 的实时事件（`turn/started`、`turn/completed`、`item/agentMessage/delta` 等）。会话内容以 snapshot/event（rollout tail）为准；live 事件供 client 显示运行状态，避免与 tail 重复渲染。
+
+### 3.3 会话操作（r0.4）
+
+```json
+{"id":5,"method":"session.send","params":{"sessionId":"...","text":"..."}}
+// daemon 内部 thread/resume（首次，幂等）+ turn/start。result: {"turnId":"..."|null}
+// 发送即取得该会话操作权（谁最后发消息谁持有）
+
+{"id":6,"method":"turn.interrupt","params":{"sessionId":"..."}}
+// 停止进行中的轮次。result: {"ok":true|false,"reason"?}
+
+{"id":7,"method":"session.new","params":{"cwd":"..."}}
+// 新建会话（cwd 受 daemon 目录白名单约束）。result: {"threadId":"..."}
+```
+
+### 3.4 审批（r0.4）
+
+app-server 请求命令/文件审批时，daemon 将其转发给持有该会话操作权的 client：
+
+```json
+// daemon -> client 通知：
+{"method":"approval.request","params":{"approvalKey","sessionId","kind":"command"|"fileChange","command","cwd","reason"}}
+// client -> daemon 决策：
+{"id":8,"method":"approval.respond","params":{"approvalKey":"...","decision":"accept"|"acceptForSession"|"decline"|"cancel"}}
+```
+
+审批不设超时；无在线设备接收时保持挂起。仅持有该会话操作权的设备可决策。
+
+### 3.5 心跳
 
 client 可发 `{"method":"ping"}`，daemon 回 `{"method":"pong"}`（信封内，兼作链路探活）。
 
