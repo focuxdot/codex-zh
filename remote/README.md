@@ -53,8 +53,14 @@ curl https://relay.wokey.ai/   # 验证：应返回 "codex-zh relay ok"
 - 自托管用户：改掉 `wrangler.toml` 的 `routes` 部署到自己账号，daemon 用 `start --relay wss://...` 指向自建实例。
 - web 页面可托管在任意 HTTPS 静态站（GitHub Pages / 同一 Worker）；daemon 用 `--web https://...` 指定配对链接的页面地址。
 
-## r0.2 范围与已知边界
+## 进度与已知边界
 
-- 已实现：E2E 加密（X25519 + HKDF + AES-256-GCM，方向绑定 AAD）、扫码配对与设备令牌、会话列表、实时查看（只读，含大快照分块与超大条目截断）、daemon 断线指数退避重连、relay 双变体。
-- 未实现（r0.3+）：PWA 完整体验与多 daemon 切换、接管/发消息/新建会话/远程审批、webhook 通知、托盘、电源管理。
-- 客户端连接断开后需手动刷新页面重连（自动重连在 r0.3 做）。
+已实现：
+- E2E 加密（X25519 + HKDF + AES-256-GCM，方向绑定 AAD）、扫码配对与设备令牌、relay 双变体（Cloudflare Worker / Node）
+- 会话列表、实时查看、发消息、接管、停止、新建会话、远程审批（广播给所有设备，先到先得）
+- 手机端 PWA（可安装、离线壳）、多电脑切换、断线自动重连、回前台立即重连
+- 电源管理：有设备在线或任务运行时阻止系统睡眠（允许关屏），空闲释放。`--no-prevent-sleep` 关闭
+
+未实现（r0.5 剩余 / r0.6）：
+- 桌面托盘与本机管理页、webhook 通知（Bark / 机器人）
+- Windows 安装器集成（可选组件、开机自启、崩溃自动拉起）

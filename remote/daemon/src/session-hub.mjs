@@ -12,12 +12,27 @@ export class SessionHub {
   #currentTurn = new Map(); // threadId -> turnId（用于 interrupt 与运行状态）
   #approvals = new Map(); // approvalKey -> { requestId, threadId, method, params }
   #nextApproval = 1;
+  #onAwakeChange;
+  #awake = false;
 
-  constructor(appServer, { log = () => {} } = {}) {
+  constructor(appServer, { log = () => {}, onAwakeChange = () => {} } = {}) {
     this.#appServer = appServer;
     this.#log = log;
+    this.#onAwakeChange = onAwakeChange;
     appServer.onNotification = (method, params) => this.#onNotification(method, params);
     appServer.onServerRequest = (id, method, params) => this.#onServerRequest(id, method, params);
+  }
+
+  // 需要保持清醒：有设备在线（用户可能随时操作）或有会话运行中（任务不能被睡眠打断）
+  shouldStayAwake() {
+    return this.#clients.size > 0 || this.#currentTurn.size > 0;
+  }
+
+  #updateAwake() {
+    const want = this.shouldStayAwake();
+    if (want === this.#awake) return;
+    this.#awake = want;
+    this.#onAwakeChange(want);
   }
 
   // —— 设备注册（鉴权成功后调用）——
@@ -27,6 +42,7 @@ export class SessionHub {
     for (const [key, entry] of this.#approvals) {
       client.pushApproval(key, entry.threadId, entry.method, entry.params);
     }
+    this.#updateAwake();
   }
 
   // —— 订阅（查看） ——
@@ -57,6 +73,7 @@ export class SessionHub {
     const result = await this.#appServer.startTurn(threadId, text);
     const turnId = result?.turnId ?? result?.turn?.id ?? null;
     if (turnId) this.#currentTurn.set(threadId, turnId);
+    this.#updateAwake();
     this.#broadcastBoard(threadId);
     return { turnId };
   }
@@ -100,10 +117,12 @@ export class SessionHub {
     if (method === "turn/started") {
       const turnId = params?.turn?.id ?? params?.turnId;
       if (turnId) this.#currentTurn.set(threadId, turnId);
+      this.#updateAwake();
       this.#broadcastBoard(threadId);
     }
     if (method === "turn/completed") {
       this.#currentTurn.delete(threadId);
+      this.#updateAwake();
       this.#broadcastBoard(threadId);
     }
     const subs = this.#subscribers.get(threadId);
@@ -150,5 +169,6 @@ export class SessionHub {
       subs.delete(client);
       if (subs.size === 0) this.#subscribers.delete(threadId);
     }
+    this.#updateAwake();
   }
 }

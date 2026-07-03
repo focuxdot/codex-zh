@@ -15,6 +15,7 @@ import {
   saveConfig,
 } from "./config.mjs";
 import { privateKeyFromPem } from "./crypto.mjs";
+import { PowerManager } from "./power.mjs";
 import { RelayLink } from "./relay-link.mjs";
 import { SessionHub } from "./session-hub.mjs";
 import { resolve as resolvePath } from "node:path";
@@ -36,6 +37,8 @@ export async function startDaemon({ configPath, overrides = {} }) {
   if (!config.relayUrl) {
     throw new Error("未配置 relay 地址：用 --relay wss://... 指定（会持久化到配置文件）");
   }
+  // 运行时开关：--no-prevent-sleep 覆盖为不阻止睡眠（不持久化）
+  if (overrides.preventSleep === false) config.preventSleep = false;
 
   const appServer = new AppServer({
     command: config.codexCommand,
@@ -45,7 +48,14 @@ export async function startDaemon({ configPath, overrides = {} }) {
   await appServer.start();
   log(`codex app-server 就绪: ${appServer.url}`);
 
-  const hub = new SessionHub(appServer, { log });
+  const power = new PowerManager({ log });
+  const hub = new SessionHub(appServer, {
+    log,
+    onAwakeChange(want) {
+      if (config.preventSleep === false) return;
+      want ? power.acquire() : power.release();
+    },
+  });
   const daemonContext = {
     config,
     configPath,
@@ -101,6 +111,7 @@ export async function startDaemon({ configPath, overrides = {} }) {
       appServer.stop();
       for (const session of sessions.values()) session.dispose();
       sessions.clear();
+      power.release();
     },
   };
 }
@@ -125,6 +136,7 @@ async function main() {
       relay: { type: "string" },
       web: { type: "string" },
       codex: { type: "string" },
+      "prevent-sleep": { type: "boolean" }, // --no-prevent-sleep 关闭防睡眠
     },
   });
   const command = positionals[0] ?? "start";
@@ -137,7 +149,12 @@ async function main() {
   if (command === "start") {
     const daemon = await startDaemon({
       configPath,
-      overrides: { relayUrl: values.relay, webUrl: values.web, codexCommand: values.codex },
+      overrides: {
+        relayUrl: values.relay,
+        webUrl: values.web,
+        codexCommand: values.codex,
+        preventSleep: values["prevent-sleep"], // undefined 时保持配置默认；--no-prevent-sleep => false
+      },
     });
     const shutdown = () => {
       daemon.stop();
