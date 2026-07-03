@@ -338,7 +338,10 @@ class Session {
   }
 }
 
-// —— rollout 条目渲染（尽力而为，未知类型显示摘要） ——
+// —— rollout 条目渲染 ——
+// 关键：codex 把每条逻辑消息写两遍——语义事件 `event_msg`（agent_message/
+// user_message）+ OpenAI API 格式 `response_item`（message）。二者内容相同，
+// 若都渲染就会重复（"两条收到"）。只认 event_msg 语义流，response_item 一律跳过。
 function extractText(value, depth = 0) {
   if (depth > 4 || value == null) return "";
   if (typeof value === "string") return value;
@@ -354,12 +357,32 @@ function extractText(value, depth = 0) {
   return "";
 }
 
-function classify(item) {
-  const t = `${item.type ?? ""}:${item.payload?.type ?? ""}`;
-  if (/user/i.test(t)) return { cls: "user", tag: "用户" };
-  if (/agent|assistant|message/i.test(t)) return { cls: "assistant", tag: "Codex" };
-  if (/command|exec|shell/i.test(t)) return { cls: "command", tag: "命令" };
-  return { cls: "", tag: item.payload?.type ?? item.type ?? "事件" };
+// event_msg 白名单：仅这些子类型作为对话气泡渲染
+const EVENT_BUBBLE = {
+  user_message:  { cls: "user",      tag: "我",    pick: (p) => p.message },
+  agent_message: { cls: "assistant", tag: "Codex", pick: (p) => p.message },
+  exec_command_begin: { cls: "command", tag: "命令",
+    pick: (p) => Array.isArray(p.command) ? p.command.join(" ") : (p.command ?? "") },
+};
+
+// 一条 rollout item -> 气泡 {cls,tag,text}，或 null（跳过）
+function itemToBubble(item) {
+  if (item?.type === "event_msg") {
+    const spec = EVENT_BUBBLE[item.payload?.type];
+    if (!spec) return null; // task_started/token_count/reasoning 等非气泡事件跳过
+    const text = String(spec.pick(item.payload) ?? "").trim();
+    return text ? { cls: spec.cls, tag: spec.tag, text } : null;
+  }
+  // response_item（与 event_msg 重复）、turn_context、session_meta：跳过
+  if (["response_item", "turn_context", "session_meta"].includes(item?.type)) return null;
+  // 更老格式（无 event_msg）：回退通用提取，保持旧会话兼容
+  const text = extractText(item?.payload ?? item).trim();
+  if (!text) return null;
+  const t = `${item?.type ?? ""}:${item?.payload?.type ?? ""}`;
+  if (/user/i.test(t)) return { cls: "user", tag: "我", text };
+  if (/command|exec|shell/i.test(t)) return { cls: "command", tag: "命令", text };
+  if (/agent|assistant|message/i.test(t)) return { cls: "assistant", tag: "Codex", text };
+  return null; // 未知且非消息：不渲染，避免噪声
 }
 
 // —— 应用控制器 ——
@@ -544,7 +567,8 @@ async function sendMessage() {
   if (!text || !app.currentId) return;
   input.value = "";
   autoGrow();
-  appendBubble("user", "我", text);
+  // 不乐观渲染用户气泡：会话文件会记录 user_message，由 tail 统一渲染，
+  // 乐观追加会与 tail 重复。setRunning 立即给出"已发送/运行中"反馈。
   setRunning(true);
   try {
     // 首条消息含 resume + 模型初始化，可能较慢
@@ -654,9 +678,9 @@ function appendBubble(cls, tag, text) {
 function renderInto(items) {
   const frag = document.createDocumentFragment();
   for (const item of items) {
-    const text = extractText(item.payload ?? item).trim();
-    if (!text) continue;
-    const { cls, tag } = classify(item);
+    const bubble = itemToBubble(item);
+    if (!bubble) continue;
+    const { cls, tag, text } = bubble;
     const div = document.createElement("div");
     div.className = `item ${cls}`;
     const t = document.createElement("span");
