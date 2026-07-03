@@ -4,6 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Codex-ZH Remote</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#161b21">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Codex 远程">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
@@ -11,7 +19,25 @@
          background: #101418; color: #e6e9ec; }
   header { position: sticky; top: 0; background: #161b21; padding: 10px 16px;
            display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #232a32; }
-  header h1 { font-size: 16px; margin: 0; flex: 1; }
+  header h1 { font-size: 16px; margin: 0; flex: 1; cursor: pointer; user-select: none;
+              white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #chev { display: none; color: #8a94a0; font-size: 12px; margin-left: 5px; }
+  #chev.show { display: inline; }
+  /* 切换电脑弹层 */
+  #sheet { display: none; position: fixed; inset: 0; z-index: 40; background: rgba(0,0,0,.5); }
+  #sheet.open { display: block; }
+  #sheetbox { position: absolute; left: 0; right: 0; bottom: 0; background: #161b21;
+              border-radius: 14px 14px 0 0; padding: 14px 16px calc(20px + env(safe-area-inset-bottom));
+              max-width: 760px; margin: 0 auto; }
+  .sheethead { font-size: 13px; color: #8a94a0; margin-bottom: 10px; letter-spacing: 1px; }
+  .drow { display: flex; align-items: center; gap: 10px; padding: 12px 10px; border-radius: 10px;
+          cursor: pointer; }
+  .drow:active { background: #1c232b; }
+  .drow.active { background: #16241b; }
+  .drow .dname { flex: 1; }
+  .drow .dcur { font-size: 11px; color: #8fd6a8; }
+  .drow .ddot { width: 8px; height: 8px; border-radius: 50%; background: #4a5560; }
+  .drow.active .ddot { background: #4cd07d; }
   #status { font-size: 12px; padding: 2px 10px; border-radius: 10px; background: #3a2f2f; color: #e0a0a0; }
   #status.online { background: #21382a; color: #8fd6a8; }
   main { padding: 12px 16px 40px; max-width: 760px; margin: 0 auto; }
@@ -86,9 +112,15 @@
 <body>
 <header>
   <button id="back" style="display:none">← 返回</button>
-  <h1 id="title">Codex-ZH Remote</h1>
+  <h1 id="title">Codex-ZH Remote<span id="chev"></span></h1>
   <span id="status">连接中…</span>
 </header>
+<div id="sheet">
+  <div id="sheetbox">
+    <div class="sheethead">切换电脑</div>
+    <div id="daemonlist"></div>
+  </div>
+</div>
 <div id="approvals"></div>
 <main>
   <div id="banner" class="banner"></div>
@@ -116,6 +148,31 @@ const b64 = {
 const AAD_C2D = enc.encode("czr1:c2d");
 const AAD_D2C = enc.encode("czr1:d2c");
 
+// —— 多电脑存储：czr-daemons = { [id]: {relay,id,pk,name,deviceToken} }，czr-active = id ——
+function loadStore() {
+  let daemons = {};
+  try { daemons = JSON.parse(localStorage.getItem("czr-daemons") || "{}"); } catch {}
+  // 兼容旧版单电脑存储
+  if (!Object.keys(daemons).length) {
+    try {
+      const old = JSON.parse(localStorage.getItem("czr-daemon") || "null");
+      if (old?.id) { daemons[old.id] = old; localStorage.setItem("czr-daemons", JSON.stringify(daemons)); }
+    } catch {}
+  }
+  return daemons;
+}
+function listDaemons() {
+  return Object.values(loadStore());
+}
+function saveDaemon(info) {
+  const daemons = loadStore();
+  daemons[info.id] = { relay: info.relay, id: info.id, pk: info.pk, name: info.name, deviceToken: info.deviceToken };
+  localStorage.setItem("czr-daemons", JSON.stringify(daemons));
+  localStorage.setItem("czr-active", info.id);
+}
+function setActiveDaemon(id) { localStorage.setItem("czr-active", id); }
+
+// 决定本次要连接的电脑：配对码优先 -> 上次活跃 -> 列表第一个
 function loadDaemonInfo() {
   const hash = new URLSearchParams(location.hash.slice(1));
   if (hash.get("p")) {
@@ -123,8 +180,11 @@ function loadDaemonInfo() {
     history.replaceState(null, "", location.pathname); // 配对码不留在地址栏
     return { ...payload, fromPair: true };
   }
-  const saved = localStorage.getItem("czr-daemon");
-  return saved ? JSON.parse(saved) : null;
+  const daemons = loadStore();
+  const active = localStorage.getItem("czr-active");
+  if (active && daemons[active]) return daemons[active];
+  const first = Object.values(daemons)[0];
+  return first || null;
 }
 
 // —— 纯 JS X25519 后备（RFC 7748，BigInt）——
@@ -259,10 +319,7 @@ class Session {
     const auth = await this.request("auth", authParams);
     if (auth.deviceToken) {
       this.info = { ...this.info, fromPair: false, deviceToken: auth.deviceToken, name: auth.daemonName };
-      localStorage.setItem("czr-daemon", JSON.stringify({
-        relay: this.info.relay, id: this.info.id, pk: this.info.pk,
-        name: auth.daemonName, deviceToken: auth.deviceToken,
-      }));
+      saveDaemon(this.info); // 配对成功即入库并设为活跃
     }
     this.reconnectAttempt = 0;
     this.onReady(auth);
@@ -402,6 +459,12 @@ function showBanner(text) {
   $("banner").textContent = text || "";
 }
 
+// 设置标题文本但保留 #chev 徽标
+function setTitle(text) {
+  const h = $("title");
+  h.firstChild.textContent = text;
+}
+
 function relTime(sec) {
   if (!sec) return "";
   const d = Date.now() / 1000 - sec;
@@ -517,7 +580,7 @@ async function openSession(id, title) {
   $("viewer").classList.add("active");
   $("composer").classList.add("active");
   $("back").style.display = "";
-  $("title").textContent = title;
+  setTitle(title);
   $("log").innerHTML = '<div class="notice">加载中…</div>';
   setRunning(false);
   await app.session.request("session.watch", { sessionId: id });
@@ -532,7 +595,7 @@ async function closeSession() {
   $("log").innerHTML = "";
   $("list").classList.remove("hidden");
   $("back").style.display = "none";
-  $("title").textContent = app.session?.info.name || "Codex-ZH Remote";
+  setTitle(app.session?.info.name || "Codex-ZH Remote");
   await refreshList().catch(() => {});
 }
 
@@ -741,15 +804,50 @@ function autoGrow() {
   el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
 }
 
-// —— 启动 ——
-async function main() {
-  const info = loadDaemonInfo();
-  if (!info) {
-    $("list").innerHTML = '<div class="notice">未配对。请在电脑上运行配对命令，用本机扫码或打开配对链接。</div>';
-    $("status").textContent = "未配对";
-    return;
+// —— 多电脑切换 ——
+function updateChevron() {
+  $("chev").classList.toggle("show", listDaemons().length > 1);
+}
+
+function openSheet() {
+  const daemons = listDaemons();
+  if (daemons.length <= 1) return; // 只有一台不弹
+  const active = app.session?.info.id;
+  const box = $("daemonlist");
+  box.innerHTML = "";
+  for (const d of daemons) {
+    const row = document.createElement("div");
+    row.className = `drow${d.id === active ? " active" : ""}`;
+    const dot = document.createElement("span"); dot.className = "ddot";
+    const name = document.createElement("span"); name.className = "dname"; name.textContent = d.name || "电脑";
+    row.append(dot, name);
+    if (d.id === active) { const c = document.createElement("span"); c.className = "dcur"; c.textContent = "当前"; row.append(c); }
+    else row.onclick = () => { $("sheet").classList.remove("open"); switchDaemon(d.id); };
+    box.appendChild(row);
   }
-  $("title").textContent = info.name || "Codex-ZH Remote";
+  $("sheet").classList.add("open");
+}
+
+async function switchDaemon(id) {
+  const daemons = loadStore();
+  const info = daemons[id];
+  if (!info || info.id === app.session?.info.id) return;
+  setActiveDaemon(id);
+  // 拆掉当前连接与视图
+  if (app.session) { app.session.closedByUser = true; app.session.ws?.close(); }
+  app.view = "list"; app.currentId = null;
+  $("viewer").classList.remove("active"); $("composer").classList.remove("active");
+  $("back").style.display = "none"; $("log").innerHTML = "";
+  $("approvals").innerHTML = ""; updateTitleBlink();
+  $("list").classList.remove("hidden");
+  $("list").innerHTML = '<div class="notice">正在连接…</div>';
+  startSession(info);
+}
+
+// —— 启动会话（可反复调用以切换电脑）——
+function startSession(info) {
+  setTitle(info.name || "Codex-ZH Remote");
+  updateChevron();
   const session = new Session(info);
   app.session = session;
   session.onStatus = (online, text) => {
@@ -759,6 +857,7 @@ async function main() {
   session.onNotify = handleNotify;
   session.onReady = async () => {
     showBanner("");
+    updateChevron();
     try {
       if (app.view === "session" && app.currentId) {
         // 重连后恢复当前会话的实时订阅
@@ -770,21 +869,33 @@ async function main() {
       showBanner(`加载失败：${err.message}`);
     }
   };
+  session.start().catch((err) => showBanner(`连接失败：${err.message}`));
+}
 
+// —— 一次性启动 ——
+async function main() {
+  // 一次性 DOM 绑定
   $("back").onclick = closeSession;
   $("send").onclick = sendMessage;
   $("stop").onclick = stopTurn;
   $("input").addEventListener("input", autoGrow);
-  // 锁屏/切走后回到前台：立即重连并恢复
+  $("title").onclick = openSheet;
+  $("sheet").onclick = (e) => { if (e.target === $("sheet")) $("sheet").classList.remove("open"); };
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible") session.ensureAlive();
+    if (document.visibilityState === "visible") app.session?.ensureAlive();
   });
-
-  try {
-    await session.start();
-  } catch (err) {
-    showBanner(`连接失败：${err.message}`);
+  // 注册 Service Worker（PWA 离线壳）
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("sw.js").catch(() => {});
   }
+
+  const info = loadDaemonInfo();
+  if (!info) {
+    $("list").innerHTML = '<div class="notice">未配对。请在电脑上运行配对命令，用本机扫码或打开配对链接。</div>';
+    $("status").textContent = "未配对";
+    return;
+  }
+  startSession(info);
 }
 main();
 </script>
