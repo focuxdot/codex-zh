@@ -17,19 +17,32 @@
   main { padding: 12px 16px 40px; max-width: 760px; margin: 0 auto; }
   main:has(#composer.active ~ *), body:has(#composer.active) main { padding-bottom: 96px; }
   .card { background: #161b21; border: 1px solid #232a32; border-radius: 10px;
-          padding: 12px 14px; margin-bottom: 10px; cursor: pointer; }
+          padding: 12px 14px; margin-bottom: 10px; cursor: pointer; position: relative; }
   .card:active { background: #1c232b; }
+  .card.hot { border-color: #2f5e40; }
+  .card.warn { border-color: #6b5626; background: #1c1a12; }
   .newbtn { text-align: center; color: #8fb7e0; border: 1px dashed #34506e; border-radius: 10px;
             padding: 12px; margin-bottom: 12px; cursor: pointer; }
   .newbtn:active { background: #18222c; }
-  .card .preview { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .card .meta { font-size: 12px; color: #8a94a0; margin-top: 4px; }
+  .card .preview { white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+                   font-weight: 600; padding-right: 64px; }
+  .card .meta { font-size: 12px; color: #8a94a0; margin-top: 4px; white-space: nowrap;
+                overflow: hidden; text-overflow: ellipsis; }
+  .badge { position: absolute; right: 12px; top: 12px; font-size: 11px; padding: 2px 8px;
+           border-radius: 9px; }
+  .badge.run { background: #21382a; color: #8fd6a8; }
+  .badge.appr { background: #3a3113; color: #e6c169; }
+  .secthead { font-size: 12px; color: #8a94a0; margin: 16px 2px 8px; letter-spacing: 1px; }
+  .pulse { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #4cd07d;
+           margin-right: 5px; animation: pulse 1.2s ease-in-out infinite; vertical-align: 1px; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .25; } }
   #viewer { display: none; }
   #viewer.active { display: block; }
   #list.hidden { display: none; }
   .item { border-left: 3px solid #2c3742; padding: 6px 10px; margin: 8px 0; border-radius: 0 8px 8px 0;
           background: #141a20; word-break: break-word; white-space: pre-wrap; }
-  .item.user { border-color: #4f83c2; }
+  .item.user { border-left: none; border-right: 3px solid #4f83c2; border-radius: 8px 0 0 8px;
+               margin-left: 14%; background: #151d27; }
   .item.assistant { border-color: #56a875; }
   .item.command { border-color: #b98a4a; font-family: ui-monospace, monospace; font-size: 13px; }
   .item .tag { font-size: 11px; color: #8a94a0; display: block; margin-bottom: 2px; }
@@ -50,9 +63,17 @@
   #send, #stop { border: none; border-radius: 10px; padding: 9px 16px; font: inherit; cursor: pointer; }
   #send { background: #2f6fb0; color: #fff; }
   #stop { background: #7a3a3a; color: #fff; display: none; }
+  /* 全局审批区：任何页面都置顶可见 */
+  #approvals { position: sticky; top: 45px; z-index: 20; max-width: 760px; margin: 0 auto; padding: 0 16px; }
+  /* 会话页状态条 */
+  #sstatus { display: none; font-size: 13px; color: #8fd6a8; background: #14211a;
+             border: 1px solid #234631; border-radius: 8px; padding: 7px 12px; margin-bottom: 8px; }
+  #sstatus.appr { color: #e6c169; background: #241f10; border-color: #6b5626; }
+  /* 折叠输出 */
+  .fold { color: #8fb7e0; font-size: 12px; cursor: pointer; margin-top: 4px; display: inline-block; }
   /* 审批卡片 */
   .approval { background: #2a2416; border: 1px solid #6b5626; border-radius: 10px;
-              padding: 12px 14px; margin: 10px 0; }
+              padding: 12px 14px; margin: 10px 0; box-shadow: 0 4px 16px rgba(0,0,0,.4); }
   .approval .atitle { color: #e6c169; font-weight: 600; margin-bottom: 6px; }
   .approval .acmd { font-family: ui-monospace, monospace; font-size: 13px; background: #16130b;
                     border-radius: 6px; padding: 8px 10px; white-space: pre-wrap; word-break: break-all; }
@@ -68,10 +89,14 @@
   <h1 id="title">Codex-ZH Remote</h1>
   <span id="status">连接中…</span>
 </header>
+<div id="approvals"></div>
 <main>
   <div id="banner" class="banner"></div>
   <div id="list"><div class="notice">加载会话列表…</div></div>
-  <div id="viewer"><div id="log"></div></div>
+  <div id="viewer">
+    <div id="sstatus"></div>
+    <div id="log"></div>
+  </div>
 </main>
 <div id="composer">
   <span id="runhint">Codex 运行中…</span>
@@ -250,9 +275,22 @@ class Session {
     const delay = Math.min(1000 * 2 ** this.reconnectAttempt, 15000);
     this.reconnectAttempt += 1;
     this.onStatus(false, `重连中…`);
-    setTimeout(() => {
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
       this.#openAndAuth().catch(() => this.#onClose());
     }, delay);
+  }
+
+  // 回到前台时立即重连，不等退避计时（锁屏/切走会断开 WebSocket）
+  ensureAlive() {
+    if (this.closedByUser) return;
+    if (this.ws?.readyState === WebSocket.OPEN) return;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    this.reconnectAttempt = 0;
+    this.#openAndAuth().catch(() => this.#onClose());
   }
 
   async onFrame(frame) {
@@ -331,6 +369,9 @@ const app = {
   currentId: null,     // 打开的会话 id
   currentTitle: "",
   running: false,      // 该会话是否有进行中的轮次
+  sessionNames: new Map(), // id -> 展示名（审批卡片用）
+  approvalsPending: 0,
+  refreshTimer: null,
 };
 
 function showBanner(text) {
@@ -338,32 +379,94 @@ function showBanner(text) {
   $("banner").textContent = text || "";
 }
 
+function relTime(sec) {
+  if (!sec) return "";
+  const d = Date.now() / 1000 - sec;
+  if (d < 60) return "刚刚";
+  if (d < 3600) return `${Math.floor(d / 60)} 分钟前`;
+  if (d < 86400) return `${Math.floor(d / 3600)} 小时前`;
+  if (d < 7 * 86400) return `${Math.floor(d / 86400)} 天前`;
+  return new Date(sec * 1000).toLocaleDateString();
+}
+
+function sessionCard(s) {
+  const card = document.createElement("div");
+  const busy = s.running || s.active;
+  card.className = `card${s.approvals ? " warn" : busy ? " hot" : ""}`;
+  const preview = document.createElement("div");
+  preview.className = "preview";
+  if (busy && !s.approvals) {
+    const dot = document.createElement("span");
+    dot.className = "pulse";
+    preview.appendChild(dot);
+  }
+  preview.appendChild(document.createTextNode(s.name || s.preview || "（无标题）"));
+  const meta = document.createElement("div");
+  meta.className = "meta";
+  const dir = (s.cwd || "").split("/").pop() || s.cwd || "";
+  meta.textContent = [dir, relTime(s.updatedAt)].filter(Boolean).join("　·　");
+  card.append(preview, meta);
+  if (s.approvals) {
+    const b = document.createElement("span");
+    b.className = "badge appr";
+    b.textContent = "等待审批";
+    card.appendChild(b);
+  } else if (busy) {
+    const b = document.createElement("span");
+    b.className = "badge run";
+    b.textContent = "运行中";
+    card.appendChild(b);
+  }
+  card.onclick = () => openSession(s.id, s.name || s.preview?.slice(0, 24) || "会话");
+  return card;
+}
+
+// 任务看板：待审批 > 运行中 > 继续上次 > 最近
 function renderList(sessions) {
+  app.sessionNames = new Map(sessions.map((s) => [s.id, s.name || s.preview?.slice(0, 24) || "会话"]));
   const list = $("list");
   list.innerHTML = "";
+
+  const attention = sessions.filter((s) => s.approvals || s.running || s.active);
+  const rest = sessions.filter((s) => !attention.includes(s));
+  attention.sort((a, b) => (b.approvals || 0) - (a.approvals || 0));
+
+  if (attention.length) {
+    const h = document.createElement("div");
+    h.className = "secthead";
+    h.textContent = "进行中";
+    list.appendChild(h);
+    for (const s of attention) list.appendChild(sessionCard(s));
+  }
+
+  // 继续上次打开的会话（不在"进行中"里时才显示，避免重复）
+  const last = JSON.parse(localStorage.getItem("czr-last") || "null");
+  const lastSession = last && !attention.some((s) => s.id === last.id)
+    ? rest.find((s) => s.id === last.id) : null;
+
+  const h2 = document.createElement("div");
+  h2.className = "secthead";
+  h2.textContent = "最近";
+  list.appendChild(h2);
   const nl = document.createElement("div");
   nl.className = "newbtn";
   nl.textContent = "＋ 新建会话";
   nl.onclick = newSession;
   list.appendChild(nl);
+  if (lastSession) {
+    const c = sessionCard(lastSession);
+    c.querySelector(".meta").textContent = `上次查看　·　${c.querySelector(".meta").textContent}`;
+    list.appendChild(c);
+  }
+  for (const s of rest) {
+    if (lastSession && s.id === lastSession.id) continue;
+    list.appendChild(sessionCard(s));
+  }
   if (!sessions.length) {
     const n = document.createElement("div");
     n.className = "notice";
     n.textContent = "暂无会话";
     list.appendChild(n);
-  }
-  for (const s of sessions) {
-    const card = document.createElement("div");
-    card.className = "card";
-    const preview = document.createElement("div");
-    preview.className = "preview";
-    preview.textContent = s.name || s.preview || "（无标题）";
-    const meta = document.createElement("div");
-    meta.className = "meta";
-    meta.textContent = `${s.cwd || ""}　·　${s.source || ""}　·　${s.updatedAt ? new Date(s.updatedAt * 1000).toLocaleString() : ""}`;
-    card.append(preview, meta);
-    card.onclick = () => openSession(s.id, s.name || s.preview?.slice(0, 24) || "会话");
-    list.appendChild(card);
   }
 }
 
@@ -372,11 +475,21 @@ async function refreshList() {
   renderList(sessions);
 }
 
+// 看板变化时节流刷新（仅列表视图）
+function scheduleListRefresh() {
+  if (app.view !== "list" || app.refreshTimer) return;
+  app.refreshTimer = setTimeout(() => {
+    app.refreshTimer = null;
+    if (app.view === "list") refreshList().catch(() => {});
+  }, 800);
+}
+
 async function openSession(id, title) {
   app.view = "session";
   app.currentId = id;
   app.currentTitle = title;
   app.running = false;
+  localStorage.setItem("czr-last", JSON.stringify({ id, title }));
   $("list").classList.add("hidden");
   $("viewer").classList.add("active");
   $("composer").classList.add("active");
@@ -405,6 +518,24 @@ function setRunning(running) {
   $("send").style.display = running ? "none" : "";
   $("stop").style.display = running ? "" : "none";
   $("runhint").style.display = running ? "" : "none";
+  updateStatusStrip();
+}
+
+// 会话页状态条：等待审批 > 运行中 > 隐藏
+function updateStatusStrip() {
+  const el = $("sstatus");
+  const hasApproval = document.querySelector(`#approvals .approval[data-sid="${app.currentId}"]`);
+  if (hasApproval) {
+    el.className = "appr";
+    el.style.display = "block";
+    el.textContent = "⏸ Codex 在等你的审批（见顶部卡片）";
+  } else if (app.running) {
+    el.className = "";
+    el.style.display = "block";
+    el.innerHTML = '<span class="pulse"></span>Codex 正在工作…';
+  } else {
+    el.style.display = "none";
+  }
 }
 
 async function sendMessage() {
@@ -445,13 +576,34 @@ async function newSession() {
   }
 }
 
-// —— 审批卡片 ——
+// —— 全局审批卡片：任何页面都置顶显示，任一设备处理后各端同步消失 ——
+let titleBlink = null;
+function updateTitleBlink() {
+  const n = $("approvals").childElementCount;
+  app.approvalsPending = n;
+  if (n > 0 && !titleBlink) {
+    let flip = false;
+    titleBlink = setInterval(() => {
+      flip = !flip;
+      document.title = flip ? `（${$("approvals").childElementCount} 个审批）Codex-ZH` : "Codex-ZH Remote";
+    }, 1200);
+  } else if (n === 0 && titleBlink) {
+    clearInterval(titleBlink);
+    titleBlink = null;
+    document.title = "Codex-ZH Remote";
+  }
+}
+
 function showApproval(p) {
+  if (document.querySelector(`#approvals .approval[data-key="${p.approvalKey}"]`)) return;
   const card = document.createElement("div");
   card.className = "approval";
+  card.dataset.key = p.approvalKey;
+  card.dataset.sid = p.sessionId;
   const title = document.createElement("div");
   title.className = "atitle";
-  title.textContent = p.kind === "fileChange" ? "Codex 请求修改文件" : "Codex 请求执行命令";
+  const sname = app.sessionNames.get(p.sessionId) || "会话";
+  title.textContent = `${sname} · ${p.kind === "fileChange" ? "请求修改文件" : "请求执行命令"}`;
   const body = document.createElement("div");
   body.className = "acmd";
   body.textContent = Array.isArray(p.command) ? p.command.join(" ") : (p.command || p.reason || "（详情见电脑端）");
@@ -459,9 +611,11 @@ function showApproval(p) {
   btns.className = "abtns";
   const decide = async (decision) => {
     card.remove();
+    updateTitleBlink();
+    updateStatusStrip();
     try {
       const r = await app.session.request("approval.respond", { approvalKey: p.approvalKey, decision });
-      if (!r.ok) showBanner(`审批未生效：${r.reason || ""}`);
+      if (!r.ok && r.reason) showBanner(`审批未生效：${r.reason}`);
     } catch (err) {
       showBanner(`审批失败：${err.message}`);
     }
@@ -474,9 +628,16 @@ function showApproval(p) {
   no.onclick = () => decide("decline");
   btns.append(yes, no);
   card.append(title, body, btns);
-  $("log").appendChild(card);
-  window.scrollTo(0, document.body.scrollHeight);
-  try { navigator.vibrate?.(200); } catch {}
+  $("approvals").appendChild(card);
+  updateTitleBlink();
+  updateStatusStrip();
+  try { navigator.vibrate?.([180, 90, 180]); } catch {}
+}
+
+function resolveApproval(approvalKey) {
+  document.querySelector(`#approvals .approval[data-key="${approvalKey}"]`)?.remove();
+  updateTitleBlink();
+  updateStatusStrip();
 }
 
 function appendBubble(cls, tag, text) {
@@ -501,7 +662,25 @@ function renderInto(items) {
     const t = document.createElement("span");
     t.className = "tag"; t.textContent = tag;
     div.appendChild(t);
-    div.appendChild(document.createTextNode(text.length > 6000 ? `${text.slice(0, 6000)}…` : text));
+    const clipped = text.length > 6000 ? `${text.slice(0, 6000)}…` : text;
+    // 长命令输出默认折叠：手机上大段输出会淹没对话主线
+    const lines = clipped.split("\n");
+    if (cls === "command" && lines.length > 6) {
+      const head = document.createElement("span");
+      head.textContent = lines.slice(0, 4).join("\n");
+      const restText = lines.slice(4).join("\n");
+      const fold = document.createElement("span");
+      fold.className = "fold";
+      fold.textContent = `▾ 展开其余 ${lines.length - 4} 行`;
+      fold.onclick = () => {
+        head.textContent = clipped;
+        fold.remove();
+      };
+      div.append(head, document.createElement("br"), fold);
+      void restText;
+    } else {
+      div.appendChild(document.createTextNode(clipped));
+    }
     frag.appendChild(div);
   }
   $("log").appendChild(frag);
@@ -523,8 +702,12 @@ function handleNotify(msg) {
     renderInto(msg.params.items);
   } else if (msg.method === "session.live" && msg.params.sessionId === app.currentId) {
     onLive(msg.params.event);
-  } else if (msg.method === "approval.request" && msg.params.sessionId === app.currentId) {
-    showApproval(msg.params);
+  } else if (msg.method === "approval.request") {
+    showApproval(msg.params); // 全局：任何页面都显示
+  } else if (msg.method === "approval.resolved") {
+    resolveApproval(msg.params.approvalKey); // 其他设备处理后同步消失
+  } else if (msg.method === "board.changed") {
+    scheduleListRefresh(); // 列表徽标随运行/审批状态刷新
   }
 }
 
@@ -568,6 +751,10 @@ async function main() {
   $("send").onclick = sendMessage;
   $("stop").onclick = stopTurn;
   $("input").addEventListener("input", autoGrow);
+  // 锁屏/切走后回到前台：立即重连并恢复
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") session.ensureAlive();
+  });
 
   try {
     await session.start();

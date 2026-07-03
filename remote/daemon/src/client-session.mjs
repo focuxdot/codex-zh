@@ -1,4 +1,6 @@
 // 单个远端设备连接的 E2E 会话：握手 -> 鉴权 -> 方法路由（见 PROTOCOL.md §2/§3）
+import { statSync } from "node:fs";
+
 import { consumePairToken, findDeviceByToken, loadOrCreateConfig, saveConfig } from "./config.mjs";
 import { deriveSessionKey, open as sealedOpen, seal } from "./crypto.mjs";
 import { RolloutTail } from "./rollout-tail.mjs";
@@ -59,7 +61,18 @@ export class ClientSession {
         return;
       case "sessions.list": {
         const sessions = await this.#daemon.appServer.listThreads(message.params?.limit ?? 50);
-        this.#reply(message.id, { sessions: sessions.map(({ path, ...rest }) => rest) });
+        const hub = this.#daemon.hub;
+        const now = Date.now();
+        this.#reply(message.id, {
+          sessions: sessions.map(({ path, ...rest }) => ({
+            ...rest,
+            // 看板状态：running=本 daemon 正在驱动；active=会话文件近 60s 有写入
+            // （覆盖桌面 GUI 正在跑的会话）；approvals=待决审批数
+            running: hub.isRunning(rest.id),
+            active: path ? this.#isFileActive(path, now) : false,
+            approvals: hub.approvalCount(rest.id),
+          })),
+        });
         return;
       }
       case "session.watch":
@@ -76,7 +89,7 @@ export class ClientSession {
           return;
         }
         try {
-          const res = await this.#daemon.hub.sendMessage(sessionId, text, this);
+          const res = await this.#daemon.hub.sendMessage(sessionId, text);
           this.#reply(message.id, res);
         } catch (err) {
           this.#reply(message.id, null, { code: 500, message: `发送失败: ${err.message}` });
@@ -112,7 +125,7 @@ export class ClientSession {
           this.#reply(message.id, null, { code: 400, message: "非法审批决定" });
           return;
         }
-        this.#reply(message.id, this.#daemon.hub.respondApproval(approvalKey, decision, this));
+        this.#reply(message.id, this.#daemon.hub.respondApproval(approvalKey, decision));
         return;
       }
       default:
@@ -136,6 +149,7 @@ export class ClientSession {
         deviceToken: paired.deviceToken,
         daemonName: paired.config.daemonName,
       });
+      this.#daemon.hub.registerClient(this);
       this.#daemon.log(`新设备配对成功: ${paired.device.deviceId}`);
       return;
     }
@@ -156,6 +170,7 @@ export class ClientSession {
         deviceToken: params.deviceToken,
         daemonName: this.#daemon.config.daemonName,
       });
+      this.#daemon.hub.registerClient(this);
       return;
     }
     this.#reply(message.id, null, { code: 400, message: "缺少配对码或设备令牌" });
@@ -192,6 +207,14 @@ export class ClientSession {
     }
   }
 
+  #isFileActive(path, now) {
+    try {
+      return now - statSync(path).mtimeMs < 60_000;
+    } catch {
+      return false;
+    }
+  }
+
   // —— hub 推送入口 ——
   pushLiveEvent(sessionId, method, params) {
     this.#notify("session.live", { sessionId, event: method, params });
@@ -206,6 +229,14 @@ export class ClientSession {
       cwd: params?.cwd ?? null,
       reason: params?.reason ?? null,
     });
+  }
+
+  pushApprovalResolved(approvalKey) {
+    this.#notify("approval.resolved", { approvalKey });
+  }
+
+  pushBoardChanged(payload) {
+    this.#notify("board.changed", payload);
   }
 
   // 分块发送，保证每帧不超过 relay 的 256KiB 上限：

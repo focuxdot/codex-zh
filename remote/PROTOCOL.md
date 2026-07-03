@@ -66,7 +66,11 @@ JSON-RPC 风格：请求 `{"id",method,"params"}`，响应 `{"id","result"| "err
 
 ```json
 {"id":2,"method":"sessions.list","params":{"limit":50}}
-// result: {"sessions":[{"id","preview","name","cwd","updatedAt","source","status"}]}
+// result: {"sessions":[{"id","preview","name","cwd","updatedAt","source","status",
+//   "running",   // 本 daemon 正在驱动一轮
+//   "active",    // 会话文件近 60s 有写入（覆盖桌面 GUI 正在跑的会话）
+//   "approvals"  // 待决审批数
+// }]}
 
 {"id":3,"method":"session.watch","params":{"sessionId":"..."}}
 // result: {"ok":true}；随后：
@@ -96,16 +100,26 @@ JSON-RPC 风格：请求 `{"id",method,"params"}`，响应 `{"id","result"| "err
 
 ### 3.4 审批（r0.4）
 
-app-server 请求命令/文件审批时，daemon 将其转发给持有该会话操作权的 client：
+app-server 请求命令/文件审批时，daemon **广播给所有已鉴权设备**（审批是远程任务的头号阻塞，必须在任何设备、任何页面都能立即处理）：
 
 ```json
-// daemon -> client 通知：
+// daemon -> 所有 client：
 {"method":"approval.request","params":{"approvalKey","sessionId","kind":"command"|"fileChange","command","cwd","reason"}}
-// client -> daemon 决策：
+// 任一 client 决策（先到先得）：
 {"id":8,"method":"approval.respond","params":{"approvalKey":"...","decision":"accept"|"acceptForSession"|"decline"|"cancel"}}
+// 决策后 daemon -> 所有 client（其余设备卡片同步消失）：
+{"method":"approval.resolved","params":{"approvalKey"}}
 ```
 
-审批不设超时；无在线设备接收时保持挂起。仅持有该会话操作权的设备可决策。
+审批不设超时；无在线设备时挂起，设备（重新）鉴权成功后补发全部待决审批。
+
+### 3.6 看板变更通知
+
+会话运行状态或审批数变化时，daemon 向所有设备广播，客户端据此刷新列表徽标：
+
+```json
+{"method":"board.changed","params":{"sessionId","running":bool,"approvals":number}}
+```
 
 ### 3.5 心跳
 
