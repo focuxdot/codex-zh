@@ -34,6 +34,7 @@ export function loadOrCreateConfig(path = defaultConfigPath()) {
     codexCommand: "codex",
     appServerPort: 19271,
     preventSleep: true, // 有设备在线或任务运行时阻止系统睡眠（允许关屏）
+    notifiers: [], // webhook 通知渠道 [{type:"bark",key} | {type:"wecom",url} ...]
     devices: [],
     pairTokens: [],
   };

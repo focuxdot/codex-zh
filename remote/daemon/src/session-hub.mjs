@@ -14,11 +14,13 @@ export class SessionHub {
   #nextApproval = 1;
   #onAwakeChange;
   #awake = false;
+  #onEvent;
 
-  constructor(appServer, { log = () => {}, onAwakeChange = () => {} } = {}) {
+  constructor(appServer, { log = () => {}, onAwakeChange = () => {}, onEvent = () => {} } = {}) {
     this.#appServer = appServer;
     this.#log = log;
     this.#onAwakeChange = onAwakeChange;
+    this.#onEvent = onEvent; // (type, {sessionId, clientsOnline}) —— webhook 通知用
     appServer.onNotification = (method, params) => this.#onNotification(method, params);
     appServer.onServerRequest = (id, method, params) => this.#onServerRequest(id, method, params);
   }
@@ -124,6 +126,7 @@ export class SessionHub {
       this.#currentTurn.delete(threadId);
       this.#updateAwake();
       this.#broadcastBoard(threadId);
+      this.#onEvent("turnCompleted", { sessionId: threadId, clientsOnline: this.#clients.size });
     }
     const subs = this.#subscribers.get(threadId);
     if (!subs) return;
@@ -150,6 +153,8 @@ export class SessionHub {
       client.pushApproval(approvalKey, threadId, method, params);
     }
     this.#broadcastBoard(threadId);
+    // webhook：审批是头号阻塞，总是推（无论是否有设备在线）
+    this.#onEvent("approval", { sessionId: threadId, clientsOnline: this.#clients.size });
   }
 
   // 看板变更（运行状态/审批数变化），客户端据此刷新列表徽标

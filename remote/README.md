@@ -35,6 +35,23 @@ node remote/daemon/src/main.mjs pair
 npm run remote:smoke
 ```
 
+## 通知（任务完成 / 需要审批时推到手机）
+
+国内 Web Push 不可用，改由 daemon 主动 webhook 推送。任务完成（人不在时）
+或 Codex 请求审批时，会推到你配置的渠道。通知只含事件类型与会话名，不含
+命令原文或代码。
+
+```bash
+node remote/daemon/src/main.mjs notify --add bark --key <你的BarkKey>
+node remote/daemon/src/main.mjs notify --add wecom --url <企业微信机器人URL>
+node remote/daemon/src/main.mjs notify --test        # 发测试通知
+node remote/daemon/src/main.mjs notify --list         # 查看已配置渠道
+```
+
+支持 `bark`（iOS，`--key`，可选 `--server` 自托管）、`serverchan`（微信，`--key`）、
+`wecom` / `dingtalk`（群机器人，`--url`）、`custom`（自定义 webhook，`--url`，
+收 `{title,body,source}`）。
+
 ## 部署 relay（Cloudflare Worker）
 
 官方实例域名：`relay.wokey.ai`（已写入 `wrangler.toml` 与 daemon 默认配置）。部署前提：`wokey.ai` 已接入 Cloudflare DNS。
@@ -60,7 +77,8 @@ curl https://relay.wokey.ai/   # 验证：应返回 "codex-zh relay ok"
 - 会话列表、实时查看、发消息、接管、停止、新建会话、远程审批（广播给所有设备，先到先得）
 - 手机端 PWA（可安装、离线壳）、多电脑切换、断线自动重连、回前台立即重连
 - 电源管理：有设备在线或任务运行时阻止系统睡眠（允许关屏），空闲释放。`--no-prevent-sleep` 关闭
+- webhook 通知：任务完成（无设备在线时）/ 需要审批时推到 Bark / Server酱 / 企业微信 / 钉钉 / 自定义渠道，仅摘要不含命令
 
 未实现（r0.5 剩余 / r0.6）：
-- 桌面托盘与本机管理页、webhook 通知（Bark / 机器人）
+- 桌面托盘与本机管理页、协议版本化、wrangler 自部署文档
 - Windows 安装器集成（可选组件、开机自启、崩溃自动拉起）

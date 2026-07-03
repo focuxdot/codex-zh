@@ -15,6 +15,7 @@ import {
   saveConfig,
 } from "./config.mjs";
 import { privateKeyFromPem } from "./crypto.mjs";
+import { Notifier, redact } from "./notify.mjs";
 import { PowerManager } from "./power.mjs";
 import { RelayLink } from "./relay-link.mjs";
 import { SessionHub } from "./session-hub.mjs";
@@ -49,11 +50,35 @@ export async function startDaemon({ configPath, overrides = {} }) {
   log(`codex app-server 就绪: ${appServer.url}`);
 
   const power = new PowerManager({ log });
+  const notifier = new Notifier(config.notifiers ?? [], { log });
+  // 会话名缓存（通知文案用会话 name，不用 preview，避免泄露首条消息内容）
+  const nameCache = new Map();
+  async function sessionName(id) {
+    if (!nameCache.has(id)) {
+      try {
+        for (const t of await appServer.listThreads(200)) nameCache.set(t.id, t.name || "");
+      } catch {
+        // 查询失败则用兜底名
+      }
+    }
+    return nameCache.get(id) || "一个会话";
+  }
   const hub = new SessionHub(appServer, {
     log,
     onAwakeChange(want) {
       if (config.preventSleep === false) return;
       want ? power.acquire() : power.release();
+    },
+    async onEvent(type, { sessionId, clientsOnline }) {
+      if (notifier.count === 0) return;
+      const name = await sessionName(sessionId);
+      if (type === "approval") {
+        // 审批总是推（头号阻塞）
+        await notifier.send("Codex 需要审批", `会话「${name}」有操作待你批准，请打开 Codex 远程处理`);
+      } else if (type === "turnCompleted" && clientsOnline === 0) {
+        // 任务完成仅在无设备在线时推，避免用户正在看时打扰
+        await notifier.send("Codex 任务完成", `会话「${name}」已完成`);
+      }
     },
   });
   const daemonContext = {
@@ -128,6 +153,74 @@ function pairCommand(configPath) {
   console.log("在手机浏览器中打开该链接完成配对。");
 }
 
+const NOTIFY_USAGE = `通知渠道管理：
+  notify --list                       列出已配置渠道
+  notify --add bark --key <key>       添加 Bark（iOS，可加 --server 自托管地址）
+  notify --add serverchan --key <key> 添加 Server 酱（微信）
+  notify --add wecom --url <url>      添加企业微信群机器人
+  notify --add dingtalk --url <url>   添加钉钉群机器人
+  notify --add custom --url <url>     添加自定义 webhook
+  notify --remove <index>             删除第 N 个渠道
+  notify --clear                      清空所有渠道
+  notify --test                       向所有渠道发测试通知`;
+
+async function notifyCommand(configPath, values) {
+  const config = loadOrCreateConfig(configPath);
+  config.notifiers = config.notifiers ?? [];
+
+  if (values.list || (!values.add && !values.remove && !values.clear && !values.test)) {
+    if (config.notifiers.length === 0) console.log("尚未配置任何通知渠道。\n");
+    else config.notifiers.forEach((n, i) => console.log(`  [${i}] ${redact(n)}`));
+    if (!values.list) console.log(`\n${NOTIFY_USAGE}`);
+    return;
+  }
+  if (values.clear) {
+    config.notifiers = [];
+    saveConfig(configPath, config);
+    console.log("已清空所有通知渠道。");
+    return;
+  }
+  if (values.remove !== undefined) {
+    const i = Number(values.remove);
+    if (!Number.isInteger(i) || i < 0 || i >= config.notifiers.length) {
+      console.error("index 越界。用 notify --list 查看。");
+      process.exit(1);
+    }
+    const [removed] = config.notifiers.splice(i, 1);
+    saveConfig(configPath, config);
+    console.log(`已删除 ${redact(removed)}`);
+    return;
+  }
+  if (values.add) {
+    const type = values.add;
+    const needKey = ["bark", "serverchan"];
+    const needUrl = ["wecom", "dingtalk", "custom"];
+    let entry;
+    if (needKey.includes(type)) {
+      if (!values.key) { console.error(`${type} 需要 --key`); process.exit(1); }
+      entry = { type, key: values.key };
+      if (type === "bark" && values.server) entry.server = values.server;
+    } else if (needUrl.includes(type)) {
+      if (!values.url) { console.error(`${type} 需要 --url`); process.exit(1); }
+      entry = { type, url: values.url };
+    } else {
+      console.error(`未知渠道类型: ${type}\n\n${NOTIFY_USAGE}`);
+      process.exit(1);
+    }
+    config.notifiers.push(entry);
+    saveConfig(configPath, config);
+    console.log(`已添加 ${redact(entry)}（当前 ${config.notifiers.length} 个渠道）`);
+    return;
+  }
+  if (values.test) {
+    const notifier = new Notifier(config.notifiers, { log: (m) => console.log(m) });
+    if (notifier.count === 0) { console.error("尚未配置通知渠道。"); process.exit(1); }
+    console.log(`向 ${notifier.count} 个渠道发送测试通知…`);
+    await notifier.send("Codex 远程测试", "如果你收到这条，说明通知渠道配置成功 ✅");
+    console.log("已发送（请检查手机是否收到）。");
+  }
+}
+
 async function main() {
   const { positionals, values } = parseArgs({
     allowPositionals: true,
@@ -137,6 +230,15 @@ async function main() {
       web: { type: "string" },
       codex: { type: "string" },
       "prevent-sleep": { type: "boolean" }, // --no-prevent-sleep 关闭防睡眠
+      // notify 命令选项
+      list: { type: "boolean" },
+      add: { type: "string" },
+      key: { type: "string" },
+      url: { type: "string" },
+      server: { type: "string" },
+      remove: { type: "string" },
+      clear: { type: "boolean" },
+      test: { type: "boolean" },
     },
   });
   const command = positionals[0] ?? "start";
@@ -144,6 +246,10 @@ async function main() {
 
   if (command === "pair") {
     pairCommand(configPath);
+    return;
+  }
+  if (command === "notify") {
+    await notifyCommand(configPath, values);
     return;
   }
   if (command === "start") {
@@ -164,7 +270,7 @@ async function main() {
     process.on("SIGTERM", shutdown);
     return;
   }
-  console.error(`未知命令: ${command}（支持 start / pair）`);
+  console.error(`未知命令: ${command}（支持 start / pair / notify）`);
   process.exit(1);
 }
 

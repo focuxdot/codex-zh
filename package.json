@@ -15,6 +15,7 @@
     "push:maintainer": "node scripts/git-push-maintainer.mjs",
     "remote:daemon": "node remote/daemon/src/main.mjs start",
     "remote:pair": "node remote/daemon/src/main.mjs pair",
+    "remote:notify": "node remote/daemon/src/main.mjs notify",
     "remote:relay": "node remote/relay-node/server.mjs",
     "remote:smoke": "node remote/scripts/smoke.mjs",
     "test-provider": "node scripts/test-provider.mjs",
