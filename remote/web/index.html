@@ -68,17 +68,96 @@ function loadDaemonInfo() {
   return saved ? JSON.parse(saved) : null;
 }
 
+// —— 纯 JS X25519 后备（RFC 7748，BigInt）——
+// 国内安卓浏览器 / 微信内核普遍不支持 WebCrypto 的 X25519（Chrome 133+ 才默认开启），
+// 原生不可用时自动降级到此实现（已与 node:crypto 官方实现交叉验证）。
+const P = 2n ** 255n - 19n;
+const A24 = 121665n;
+function leToBig(bytes) {
+  let n = 0n;
+  for (let i = bytes.length - 1; i >= 0; i--) n = (n << 8n) | BigInt(bytes[i]);
+  return n;
+}
+function bigToLe(n, len) {
+  const out = new Uint8Array(len);
+  for (let i = 0; i < len; i++) { out[i] = Number(n & 0xffn); n >>= 8n; }
+  return out;
+}
+function modPow(base, exp, mod) {
+  let result = 1n; base %= mod;
+  while (exp > 0n) {
+    if (exp & 1n) result = result * base % mod;
+    base = base * base % mod; exp >>= 1n;
+  }
+  return result;
+}
+function x25519Js(scalarBytes, uBytes) {
+  const s = Uint8Array.from(scalarBytes);
+  s[0] &= 248; s[31] &= 127; s[31] |= 64;
+  const k = leToBig(s);
+  const u = Uint8Array.from(uBytes); u[31] &= 127;
+  const x1 = leToBig(u) % P;
+  let x2 = 1n, z2 = 0n, x3 = x1, z3 = 1n, swap = 0n;
+  for (let t = 254; t >= 0; t--) {
+    const kt = (k >> BigInt(t)) & 1n;
+    swap ^= kt;
+    if (swap) { [x2, x3] = [x3, x2]; [z2, z3] = [z3, z2]; }
+    swap = kt;
+    const a = (x2 + z2) % P, aa = a * a % P;
+    const b = (x2 - z2 + P) % P, bb = b * b % P;
+    const e = (aa - bb + P) % P;
+    const c = (x3 + z3) % P, d = (x3 - z3 + P) % P;
+    const da = d * a % P, cb = c * b % P;
+    x3 = (da + cb) % P; x3 = x3 * x3 % P;
+    z3 = (da - cb + P) % P; z3 = z3 * z3 % P; z3 = z3 * x1 % P;
+    x2 = aa * bb % P;
+    z2 = e * ((aa + A24 * e) % P) % P;
+  }
+  if (swap) { [x2, x3] = [x3, x2]; [z2, z3] = [z3, z2]; }
+  return bigToLe(x2 * modPow(z2, P - 2n, P) % P, 32);
+}
+const BASE9 = (() => { const b = new Uint8Array(32); b[0] = 9; return b; })();
+
+// 协商共享密钥：原生 X25519 优先，失败降级纯 JS
+async function x25519Shared(daemonPubRaw) {
+  try {
+    const eph = await crypto.subtle.generateKey({ name: "X25519" }, false, ["deriveBits"]);
+    const pub = await crypto.subtle.importKey("raw", daemonPubRaw, { name: "X25519" }, false, []);
+    const shared = new Uint8Array(await crypto.subtle.deriveBits({ name: "X25519", public: pub }, eph.privateKey, 256));
+    const ephPubRaw = new Uint8Array(await crypto.subtle.exportKey("raw", eph.publicKey));
+    return { shared, ephPubRaw };
+  } catch {
+    const priv = crypto.getRandomValues(new Uint8Array(32));
+    return { shared: x25519Js(priv, daemonPubRaw), ephPubRaw: x25519Js(priv, BASE9) };
+  }
+}
+
+// HKDF-SHA256：原生 HKDF 优先，失败降级 HMAC 手动展开（输出 32 字节，单块足够）
+async function hkdfAesKey(shared, daemonInfo) {
+  const salt = enc.encode(daemonInfo.id);
+  const info = enc.encode("codex-zh-remote-v1");
+  try {
+    const hk = await crypto.subtle.importKey("raw", shared, "HKDF", false, ["deriveKey"]);
+    return await crypto.subtle.deriveKey(
+      { name: "HKDF", hash: "SHA-256", salt, info },
+      hk, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"],
+    );
+  } catch {
+    const saltKey = await crypto.subtle.importKey("raw", salt, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+    const prk = new Uint8Array(await crypto.subtle.sign("HMAC", saltKey, shared));
+    const prkKey = await crypto.subtle.importKey("raw", prk, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+    const input = new Uint8Array(info.length + 1);
+    input.set(info, 0); input[info.length] = 1;
+    const okm = new Uint8Array(await crypto.subtle.sign("HMAC", prkKey, input)).subarray(0, 32);
+    return await crypto.subtle.importKey("raw", okm, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
+  }
+}
+
 async function deriveKey(daemonInfo) {
-  if (!("subtle" in crypto)) throw new Error("此浏览器不支持 WebCrypto");
-  const eph = await crypto.subtle.generateKey({ name: "X25519" }, false, ["deriveBits"]);
-  const daemonPub = await crypto.subtle.importKey("raw", b64.from(daemonInfo.pk), { name: "X25519" }, false, []);
-  const shared = await crypto.subtle.deriveBits({ name: "X25519", public: daemonPub }, eph.privateKey, 256);
-  const hkdfKey = await crypto.subtle.importKey("raw", shared, "HKDF", false, ["deriveKey"]);
-  const key = await crypto.subtle.deriveKey(
-    { name: "HKDF", hash: "SHA-256", salt: enc.encode(daemonInfo.id), info: enc.encode("codex-zh-remote-v1") },
-    hkdfKey, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"],
-  );
-  const ephPubRaw = await crypto.subtle.exportKey("raw", eph.publicKey);
+  if (!crypto?.subtle) throw new Error("此浏览器不支持 WebCrypto（需 HTTPS 环境与较新内核）");
+  const { shared, ephPubRaw } = await x25519Shared(b64.from(daemonInfo.pk));
+  if (shared.every((byte) => byte === 0)) throw new Error("密钥协商失败");
+  const key = await hkdfAesKey(shared, daemonInfo);
   return { key, ephPubRaw };
 }
 
