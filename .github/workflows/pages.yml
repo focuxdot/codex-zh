@@ -7,6 +7,7 @@ on:
     paths:
       - "README.md"
       - "site/**"
+      - "remote/web/**"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
 
@@ -34,6 +35,11 @@ jobs:
         uses: actions/configure-pages@v5
         with:
           enablement: true
+
+      - name: Add Remote web client
+        run: |
+          mkdir -p site/remote
+          cp remote/web/index.html site/remote/index.html
 
       - name: Upload site
         uses: actions/upload-pages-artifact@v4

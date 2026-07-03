@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Codex-ZH Remote</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.6 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+         background: #101418; color: #e6e9ec; }
+  header { position: sticky; top: 0; background: #161b21; padding: 10px 16px;
+           display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #232a32; }
+  header h1 { font-size: 16px; margin: 0; flex: 1; }
+  #status { font-size: 12px; padding: 2px 10px; border-radius: 10px; background: #3a2f2f; color: #e0a0a0; }
+  #status.online { background: #21382a; color: #8fd6a8; }
+  main { padding: 12px 16px 40px; max-width: 760px; margin: 0 auto; }
+  .card { background: #161b21; border: 1px solid #232a32; border-radius: 10px;
+          padding: 12px 14px; margin-bottom: 10px; cursor: pointer; }
+  .card:active { background: #1c232b; }
+  .card .preview { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .card .meta { font-size: 12px; color: #8a94a0; margin-top: 4px; }
+  #viewer { display: none; }
+  #viewer.active { display: block; }
+  #list.hidden { display: none; }
+  .item { border-left: 3px solid #2c3742; padding: 6px 10px; margin: 8px 0; border-radius: 0 8px 8px 0;
+          background: #141a20; word-break: break-word; white-space: pre-wrap; }
+  .item.user { border-color: #4f83c2; }
+  .item.assistant { border-color: #56a875; }
+  .item.command { border-color: #b98a4a; font-family: ui-monospace, monospace; font-size: 13px; }
+  .item .tag { font-size: 11px; color: #8a94a0; display: block; margin-bottom: 2px; }
+  #back { background: none; border: 1px solid #2c3742; color: #e6e9ec; border-radius: 8px;
+          padding: 4px 12px; font-size: 13px; cursor: pointer; }
+  .notice { text-align: center; color: #8a94a0; padding: 30px 10px; }
+  .banner { background: #2c2417; color: #d9b36a; padding: 8px 12px; border-radius: 8px;
+            font-size: 13px; margin-bottom: 10px; display: none; }
+</style>
+</head>
+<body>
+<header>
+  <button id="back" style="display:none">← 返回</button>
+  <h1 id="title">Codex-ZH Remote</h1>
+  <span id="status">连接中…</span>
+</header>
+<main>
+  <div id="banner" class="banner"></div>
+  <div id="list"><div class="notice">加载会话列表…</div></div>
+  <div id="viewer"></div>
+</main>
+<script type="module">
+const $ = (id) => document.getElementById(id);
+const enc = new TextEncoder();
+const b64 = {
+  to: (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))),
+  from: (str) => Uint8Array.from(atob(str.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0)),
+};
+const AAD_C2D = enc.encode("czr1:c2d");
+const AAD_D2C = enc.encode("czr1:d2c");
+
+function loadDaemonInfo() {
+  const hash = new URLSearchParams(location.hash.slice(1));
+  if (hash.get("p")) {
+    const payload = JSON.parse(new TextDecoder().decode(b64.from(hash.get("p"))));
+    history.replaceState(null, "", location.pathname); // 配对码不留在地址栏
+    return { ...payload, fromPair: true };
+  }
+  const saved = localStorage.getItem("czr-daemon");
+  return saved ? JSON.parse(saved) : null;
+}
+
+async function deriveKey(daemonInfo) {
+  if (!("subtle" in crypto)) throw new Error("此浏览器不支持 WebCrypto");
+  const eph = await crypto.subtle.generateKey({ name: "X25519" }, false, ["deriveBits"]);
+  const daemonPub = await crypto.subtle.importKey("raw", b64.from(daemonInfo.pk), { name: "X25519" }, false, []);
+  const shared = await crypto.subtle.deriveBits({ name: "X25519", public: daemonPub }, eph.privateKey, 256);
+  const hkdfKey = await crypto.subtle.importKey("raw", shared, "HKDF", false, ["deriveKey"]);
+  const key = await crypto.subtle.deriveKey(
+    { name: "HKDF", hash: "SHA-256", salt: enc.encode(daemonInfo.id), info: enc.encode("codex-zh-remote-v1") },
+    hkdfKey, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"],
+  );
+  const ephPubRaw = await crypto.subtle.exportKey("raw", eph.publicKey);
+  return { key, ephPubRaw };
+}
+
+class Session {
+  constructor(daemonInfo) {
+    this.info = daemonInfo;
+    this.pendingRequests = new Map();
+    this.nextId = 1;
+    this.firstFrame = true;
+    this.onNotify = () => {};
+    this.onStatus = () => {};
+  }
+  async connect() {
+    const { key, ephPubRaw } = await deriveKey(this.info);
+    this.key = key;
+    this.ephPubRaw = ephPubRaw;
+    this.firstFrame = true;
+    const ws = new WebSocket(`${this.info.relay.replace(/\/$/, "")}/v1/client/${this.info.id}`);
+    this.ws = ws;
+    await new Promise((ok, bad) => { ws.onopen = ok; ws.onerror = () => bad(new Error("无法连接中继")); });
+    ws.onmessage = (e) => this.onFrame(JSON.parse(e.data));
+    ws.onclose = () => this.onStatus(false, "连接断开");
+  }
+  async onFrame(frame) {
+    if (frame.t === "status") { this.onStatus(frame.online, frame.online ? "在线" : "电脑离线"); return; }
+    if (frame.t !== "msg") return;
+    const env = frame.data;
+    const iv = b64.from(env.n);
+    const data = b64.from(env.c);
+    const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv, additionalData: AAD_D2C }, this.key, data);
+    const msg = JSON.parse(new TextDecoder().decode(plain));
+    if (msg.id !== undefined && this.pendingRequests.has(msg.id)) {
+      const { resolve, reject } = this.pendingRequests.get(msg.id);
+      this.pendingRequests.delete(msg.id);
+      msg.error ? reject(new Error(msg.error.message)) : resolve(msg.result);
+    } else if (msg.method) {
+      this.onNotify(msg);
+    }
+  }
+  async send(payload) {
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const cipher = await crypto.subtle.encrypt(
+      { name: "AES-GCM", iv, additionalData: AAD_C2D }, this.key, enc.encode(JSON.stringify(payload)));
+    const envelope = { n: b64.to(iv), c: b64.to(cipher) };
+    if (this.firstFrame) {
+      envelope.v = 1;
+      envelope.k = b64.to(this.ephPubRaw);
+      this.firstFrame = false;
+    }
+    this.ws.send(JSON.stringify({ t: "msg", data: envelope }));
+  }
+  request(method, params = {}) {
+    const id = this.nextId++;
+    return new Promise((resolve, reject) => {
+      this.pendingRequests.set(id, { resolve, reject });
+      this.send({ id, method, params });
+      setTimeout(() => {
+        if (this.pendingRequests.has(id)) {
+          this.pendingRequests.delete(id);
+          reject(new Error(`请求超时: ${method}`));
+        }
+      }, 15000);
+    });
+  }
+}
+
+// —— rollout 条目渲染（尽力而为，未知类型显示摘要） ——
+function extractText(value, depth = 0) {
+  if (depth > 4 || value == null) return "";
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) return value.map((v) => extractText(v, depth + 1)).filter(Boolean).join("\n");
+  if (typeof value === "object") {
+    for (const k of ["text", "message", "content", "command", "aggregated_output"]) {
+      if (k in value) {
+        const got = extractText(value[k], depth + 1);
+        if (got) return got;
+      }
+    }
+  }
+  return "";
+}
+
+function classify(item) {
+  const t = `${item.type ?? ""}:${item.payload?.type ?? ""}`;
+  if (/user/i.test(t)) return { cls: "user", tag: "用户" };
+  if (/agent|assistant|message/i.test(t)) return { cls: "assistant", tag: "Codex" };
+  if (/command|exec|shell/i.test(t)) return { cls: "command", tag: "命令" };
+  return { cls: "", tag: item.payload?.type ?? item.type ?? "事件" };
+}
+
+function renderItems(items) {
+  const frag = document.createDocumentFragment();
+  for (const item of items) {
+    const text = extractText(item.payload ?? item).trim();
+    if (!text) continue;
+    const { cls, tag } = classify(item);
+    const div = document.createElement("div");
+    div.className = `item ${cls}`;
+    const tagEl = document.createElement("span");
+    tagEl.className = "tag";
+    tagEl.textContent = tag;
+    div.appendChild(tagEl);
+    div.appendChild(document.createTextNode(text.length > 4000 ? `${text.slice(0, 4000)}…` : text));
+    frag.appendChild(div);
+  }
+  $("viewer").appendChild(frag);
+  window.scrollTo(0, document.body.scrollHeight);
+}
+
+// —— 主流程 ——
+async function main() {
+  const info = loadDaemonInfo();
+  if (!info) {
+    $("list").innerHTML = '<div class="notice">未配对。请在电脑上运行配对命令，用本机扫码或打开配对链接。</div>';
+    $("status").textContent = "未配对";
+    return;
+  }
+  $("title").textContent = info.name || "Codex-ZH Remote";
+  const session = new Session(info);
+  session.onStatus = (online, text) => {
+    $("status").textContent = text;
+    $("status").classList.toggle("online", online);
+  };
+  session.onNotify = (msg) => {
+    if (msg.method === "session.snapshot") { $("viewer").innerHTML = ""; renderItems(msg.params.items); }
+    if (msg.method === "session.event") renderItems(msg.params.items);
+  };
+  try {
+    await session.connect();
+    const authParams = info.fromPair ? { pairToken: info.tok } : { deviceToken: info.deviceToken };
+    const auth = await session.request("auth", authParams);
+    localStorage.setItem("czr-daemon", JSON.stringify({
+      relay: info.relay, id: info.id, pk: info.pk, name: auth.daemonName, deviceToken: auth.deviceToken,
+    }));
+    const { sessions } = await session.request("sessions.list", { limit: 50 });
+    const list = $("list");
+    list.innerHTML = sessions.length ? "" : '<div class="notice">暂无会话</div>';
+    for (const s of sessions) {
+      const card = document.createElement("div");
+      card.className = "card";
+      const preview = document.createElement("div");
+      preview.className = "preview";
+      preview.textContent = s.name || s.preview || "（无标题）";
+      const meta = document.createElement("div");
+      meta.className = "meta";
+      meta.textContent = `${s.cwd}　·　${s.source}　·　${s.updatedAt ? new Date(s.updatedAt * 1000).toLocaleString() : ""}`;
+      card.append(preview, meta);
+      card.onclick = async () => {
+        list.classList.add("hidden");
+        $("viewer").classList.add("active");
+        $("viewer").innerHTML = '<div class="notice">加载中…</div>';
+        $("back").style.display = "";
+        $("title").textContent = s.name || s.preview?.slice(0, 24) || "会话";
+        $("viewer").innerHTML = "";
+        await session.request("session.watch", { sessionId: s.id });
+      };
+      list.appendChild(card);
+    }
+    $("back").onclick = async () => {
+      await session.request("session.unwatch").catch(() => {});
+      $("viewer").classList.remove("active");
+      $("viewer").innerHTML = "";
+      list.classList.remove("hidden");
+      $("back").style.display = "none";
+      $("title").textContent = info.name || "Codex-ZH Remote";
+    };
+  } catch (err) {
+    $("banner").style.display = "block";
+    $("banner").textContent = `连接失败：${err.message}`;
+  }
+}
+main();
+</script>
+</body>
+</html>
