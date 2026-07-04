@@ -61,6 +61,23 @@ export function issuePairToken(path, config) {
   return token;
 }
 
+// 创建一个设备条目并铸造其明文设备令牌（只在配置里存哈希）。
+// 由配对消费（consumePairToken）与永久链接签发（issueDeviceToken）共用，避免结构漂移。
+function createDevice(config, name = "") {
+  const now = Date.now();
+  const device = {
+    deviceId: randomId(8),
+    tokenHash: null,
+    name,
+    createdAt: now,
+    lastSeenAt: now,
+  };
+  const deviceToken = randomToken();
+  device.tokenHash = sha256(deviceToken);
+  config.devices.push(device);
+  return { device, deviceToken };
+}
+
 // 校验并消费配对令牌；daemon 进程在每次配对尝试时重读配置，
 // 使 `pair` 命令在独立进程中签发的令牌立即生效。
 export function consumePairToken(path, token) {
@@ -70,18 +87,17 @@ export function consumePairToken(path, token) {
   const found = (config.pairTokens ?? []).find((t) => t.hash === hash && t.expiresAt > now);
   if (!found) return null;
   config.pairTokens = config.pairTokens.filter((t) => t !== found && t.expiresAt > now);
-  const device = {
-    deviceId: randomId(8),
-    tokenHash: null,
-    name: "",
-    createdAt: now,
-    lastSeenAt: now,
-  };
-  const deviceToken = randomToken();
-  device.tokenHash = sha256(deviceToken);
-  config.devices.push(device);
+  const { device, deviceToken } = createDevice(config);
   saveConfig(path, config);
   return { config, device, deviceToken };
+}
+
+// 直接签发一个长期设备令牌（永久链接/QR 用）——等价于配对消费的产物，
+// 但无需一次性配对令牌换取。物理在场扫码/主动生成即可，安全性由"链接含长期凭据"承担。
+export function issueDeviceToken(path, config, { name = "" } = {}) {
+  const { device, deviceToken } = createDevice(config, name);
+  saveConfig(path, config);
+  return { device, deviceToken };
 }
 
 export function findDeviceByToken(config, deviceToken) {
@@ -106,4 +122,25 @@ export function pairUrl(config, pairToken) {
   );
   const base = config.webUrl || "https://example.invalid/remote";
   return `${base}#p=${payload}`;
+}
+
+// 永久链接载荷：内嵌长期设备令牌（dtok），手机端据此直接走设备令牌认证，无需再换取。
+// 字段名 dtok 区别于一次性配对令牌的 tok。
+export function buildDevicePayload(config, deviceToken) {
+  return {
+    v: 1,
+    relay: config.relayUrl,
+    id: config.daemonId,
+    pk: config.publicKey,
+    name: config.daemonName,
+    dtok: deviceToken,
+  };
+}
+
+export function deviceUrl(config, deviceToken) {
+  const payload = Buffer.from(JSON.stringify(buildDevicePayload(config, deviceToken))).toString(
+    "base64url",
+  );
+  const base = config.webUrl || "https://example.invalid/remote";
+  return `${base}#d=${payload}`;
 }

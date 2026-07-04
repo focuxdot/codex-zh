@@ -6,9 +6,12 @@ import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 
 import {
+  buildDevicePayload,
   buildPairPayload,
   consumePairToken,
+  deviceUrl,
   findDeviceByToken,
+  issueDeviceToken,
   issuePairToken,
   loadOrCreateConfig,
   pairUrl,
@@ -54,6 +57,35 @@ test("配对令牌：一次性消费，签发设备令牌", () => {
     // 配置中只存哈希，不存明文
     const rawConfig = JSON.stringify(loadOrCreateConfig(path));
     assert.ok(!rawConfig.includes(paired.deviceToken));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("永久设备令牌：直接签发、可查、只存哈希、生成 #d= 链接", () => {
+  const { dir, path } = tempConfig();
+  try {
+    const config = loadOrCreateConfig(path);
+    config.relayUrl = "wss://relay.example";
+    config.webUrl = "https://example/remote/";
+
+    const { device, deviceToken } = issueDeviceToken(path, config);
+    assert.ok(deviceToken.length > 30);
+    // 载荷内嵌 dtok（区别于一次性的 tok），链接是 #d=
+    assert.equal(buildDevicePayload(config, deviceToken).dtok, deviceToken);
+    const url = deviceUrl(config, deviceToken);
+    assert.ok(url.includes("#d="));
+    assert.ok(url.startsWith("https://example/remote/"));
+
+    // 令牌可被设备认证查到（重读磁盘，模拟独立进程签发→运行中 daemon 认证）
+    const fresh = loadOrCreateConfig(path);
+    const found = findDeviceByToken(fresh, deviceToken);
+    assert.ok(found);
+    assert.equal(found.deviceId, device.deviceId);
+    // 永久令牌可重复使用（非一次性）
+    assert.ok(findDeviceByToken(loadOrCreateConfig(path), deviceToken));
+    // 配置落盘只存哈希，不含明文
+    assert.ok(!JSON.stringify(fresh).includes(deviceToken));
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

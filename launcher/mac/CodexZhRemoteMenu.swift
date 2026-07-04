@@ -65,9 +65,24 @@ func makeQRImage(_ text: String, size: CGFloat) -> NSImage? {
     return NSImage(cgImage: cg, size: NSSize(width: size, height: size))
 }
 
+func copyToPasteboard(_ text: String) {
+    let pb = NSPasteboard.general
+    pb.clearContents()
+    pb.setString(text, forType: .string)
+}
+
+// 中部截断长链接用于展示（完整串仍复制），如 https://…abcd#d=…wxyz
+func middleTruncate(_ s: String, _ max: Int) -> String {
+    guard s.count > max else { return s }
+    let head = max / 2 - 1
+    let tail = max - head - 1
+    return String(s.prefix(head)) + "…" + String(s.suffix(tail))
+}
+
 final class MenuController: NSObject, NSMenuDelegate {
     let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     var windows: [NSWindow] = []
+    var qrPermURL = "" // 当前扫码页展示的永久链接（点击复制用）
 
     override init() {
         super.init()
@@ -187,33 +202,77 @@ final class MenuController: NSObject, NSMenuDelegate {
     }
 
     func showQR(_ url: String) {
+        qrPermURL = url
         let stack = NSStackView()
         stack.orientation = .vertical
         stack.alignment = .centerX
-        stack.spacing = 12
-        stack.edgeInsets = NSEdgeInsets(top: 20, left: 20, bottom: 20, right: 20)
-        let title = NSTextField(labelWithString: "用手机浏览器扫码配对")
-        title.font = .boldSystemFont(ofSize: 15)
+        stack.spacing = 14
+        stack.edgeInsets = NSEdgeInsets(top: 24, left: 24, bottom: 24, right: 24)
+
+        let title = NSTextField(labelWithString: "扫码配对（永久）")
+        title.font = .boldSystemFont(ofSize: 16)
+
         let imgView = NSImageView()
         imgView.image = makeQRImage(url, size: 260)
         imgView.translatesAutoresizingMaskIntoConstraints = false
         imgView.widthAnchor.constraint(equalToConstant: 260).isActive = true
         imgView.heightAnchor.constraint(equalToConstant: 260).isActive = true
-        let note = NSTextField(labelWithString: "配对码 5 分钟内有效，仅可用一次")
+
+        let note = NSTextField(labelWithString: "扫码即永久连接。链接含长期凭据，别转发给别人。")
         note.textColor = .secondaryLabelColor
-        let link = NSTextField(labelWithString: url)
-        link.textColor = .secondaryLabelColor
-        link.font = .systemFont(ofSize: 10)
-        link.lineBreakMode = .byTruncatingMiddle
-        link.maximumNumberOfLines = 1
-        link.isSelectable = true
-        link.translatesAutoresizingMaskIntoConstraints = false
-        link.widthAnchor.constraint(equalToConstant: 300).isActive = true
+        note.alignment = .center
+        note.font = .systemFont(ofSize: 12)
+        note.maximumNumberOfLines = 2
+        note.translatesAutoresizingMaskIntoConstraints = false
+        note.widthAnchor.constraint(equalToConstant: 300).isActive = true
+
+        // 永久链接：整块可点、点击即复制完整 url（字号放大）
+        let copyBtn = NSButton(title: middleTruncate(url, 44), target: self, action: #selector(copyPermLink(_:)))
+        copyBtn.bezelStyle = .rounded
+        copyBtn.font = .systemFont(ofSize: 13, weight: .medium)
+        copyBtn.toolTip = "点击复制永久链接"
+        copyBtn.translatesAutoresizingMaskIntoConstraints = false
+        copyBtn.widthAnchor.constraint(equalToConstant: 300).isActive = true
+
+        let hint = NSTextField(labelWithString: "↑ 点击链接即可复制到剪贴板")
+        hint.textColor = .tertiaryLabelColor
+        hint.font = .systemFont(ofSize: 11)
+
+        // 一次性链接：临时发出去用，5 分钟内有效、仅一次
+        let onceBtn = NSButton(title: "复制一次性链接（5 分钟）", target: self, action: #selector(copyOnceLink(_:)))
+        onceBtn.bezelStyle = .rounded
+        onceBtn.font = .systemFont(ofSize: 12)
+
         stack.addArrangedSubview(title)
         stack.addArrangedSubview(imgView)
         stack.addArrangedSubview(note)
-        stack.addArrangedSubview(link)
-        makeWindow("扫码配对", stack, width: 340, height: 380)
+        stack.addArrangedSubview(copyBtn)
+        stack.addArrangedSubview(hint)
+        stack.setCustomSpacing(20, after: hint)
+        stack.addArrangedSubview(onceBtn)
+        makeWindow("扫码配对", stack, width: 360, height: 470)
+    }
+
+    @objc func copyPermLink(_ sender: NSButton) {
+        copyToPasteboard(qrPermURL)
+        flashCopied(sender, restore: middleTruncate(qrPermURL, 44))
+    }
+
+    @objc func copyOnceLink(_ sender: NSButton) {
+        let res = backend(["pair-once"])
+        guard let url = res["url"] as? String else { alert("生成失败", "\(res["error"] ?? "未知错误")"); return }
+        copyToPasteboard(url)
+        flashCopied(sender, restore: "复制一次性链接（5 分钟）")
+    }
+
+    // 复制后短暂把按钮标题变为「已复制 ✓」再复原
+    func flashCopied(_ button: NSButton, restore: String) {
+        button.title = "已复制 ✓"
+        button.isEnabled = false
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+            button.title = restore
+            button.isEnabled = true
+        }
     }
 
     func showDevices(_ devices: [[String: Any]]) {

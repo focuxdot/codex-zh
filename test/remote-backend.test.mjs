@@ -15,6 +15,7 @@ import {
   enable,
   disable,
   pair,
+  pairOnce,
   listDevices,
   revokeDevice,
   notifyAdd,
@@ -122,16 +123,23 @@ test("disable bootout 两次并删 plist", () => {
   }
 });
 
-test("pair 返回配对 URL", () => {
+test("pair 返回永久 #d= URL；pair-once 返回一次性 #p= URL", () => {
   const h = harness();
   try {
     const config = loadOrCreateConfig(h.deps.configPath);
     config.relayUrl = "wss://relay.wokey.ai";
     config.webUrl = "https://example/remote/";
     saveConfig(h.deps.configPath, config);
-    const res = pair(h.deps);
-    assert.match(res.url, /#p=/);
-    assert.match(res.url, /^https:\/\/example\/remote\//);
+
+    const perm = pair(h.deps);
+    assert.match(perm.url, /#d=/);
+    assert.match(perm.url, /^https:\/\/example\/remote\//);
+    // 永久链接对应一个已入库、可撤销的设备条目
+    assert.equal(listDevices(h.deps).devices.length, 1);
+
+    const once = pairOnce(h.deps);
+    assert.match(once.url, /#p=/);
+    assert.match(once.url, /^https:\/\/example\/remote\//);
   } finally {
     h.cleanup();
   }

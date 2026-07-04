@@ -7,7 +7,8 @@
 //   status                       -> { enabled, running, deviceCount, notifierCount, relay }
 //   enable                       -> { ok, enabled } —— 装/加载 daemon+menu LaunchAgent
 //   disable                      -> { ok, enabled } —— bootout + 移除 plist
-//   pair                         -> { url } —— 签发一次性配对令牌，返回 URL 供 Swift 渲染 QR
+//   pair                         -> { url } —— 签发永久设备令牌，返回 #d= URL 供 Swift 渲染 QR
+//   pair-once                    -> { url } —— 签发一次性配对令牌（5 分钟），返回 #p= URL
 //   devices                      -> { devices:[{deviceId,name,createdAt,lastSeenAt}] }
 //   revoke   <deviceId>          -> { ok }
 //   notify-list                  -> { notifiers:[{index,label}] }
@@ -25,6 +26,8 @@ import { fileURLToPath } from "node:url";
 
 import {
   defaultConfigPath,
+  deviceUrl,
+  issueDeviceToken,
   issuePairToken,
   loadOrCreateConfig,
   pairUrl,
@@ -169,7 +172,16 @@ export function disable(deps) {
   return { ok: true, enabled: false };
 }
 
+// 永久链接：内嵌长期设备令牌，扫码/点击即永久连接（可在「已配对设备」撤销）
 export function pair(deps) {
+  const config = loadOrCreateConfig(deps.configPath);
+  if (!config.relayUrl) return { error: "未配置 relay" };
+  const { deviceToken } = issueDeviceToken(deps.configPath, config);
+  return { url: deviceUrl(loadOrCreateConfig(deps.configPath), deviceToken) };
+}
+
+// 一次性链接：5 分钟内有效、仅可用一次（适合临时发出去的场景）
+export function pairOnce(deps) {
   const config = loadOrCreateConfig(deps.configPath);
   if (!config.relayUrl) return { error: "未配置 relay" };
   const token = issuePairToken(deps.configPath, config);
@@ -229,6 +241,7 @@ export async function run(command, rest, deps = makeDeps()) {
     case "enable": return enable(deps);
     case "disable": return disable(deps);
     case "pair": return pair(deps);
+    case "pair-once": return pairOnce(deps);
     case "devices": return listDevices(deps);
     case "revoke": return revokeDevice(deps, rest[0]);
     case "notify-list": return notifyList(deps);
