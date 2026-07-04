@@ -1,0 +1,22 @@
+#!/bin/bash
+# Codex-ZH.app main executable (CFBundleExecutable). This bundle IS the patched
+# Codex.app; we run the launcher orchestrator with the bundle's own Node runtime,
+# and it then starts the in-bundle Codex (Electron). Nesting Codex.app inside
+# another .app breaks Electron's app-path resolution, so this must be one bundle.
+set -euo pipefail
+
+EXECDIR="$(cd "$(dirname "$0")" && pwd)"          # <app>/Contents/MacOS
+APP_ROOT="$(cd "$EXECDIR/../.." && pwd)"          # <app>
+export CODEX_ZH_APP_ROOT="$APP_ROOT"
+
+LAUNCHER="$APP_ROOT/Contents/Resources/codex-zh/launcher/mac/codex-zh-launcher.mjs"
+NODE="$APP_ROOT/Contents/Resources/cua_node/bin/node"
+if [ ! -x "$NODE" ]; then
+  NODE="$(command -v node || true)"
+fi
+if [ -z "${NODE:-}" ] || [ ! -x "$NODE" ]; then
+  osascript -e 'display dialog "找不到可用的 Node 运行时，无法启动 Codex-ZH。" buttons {"好"} default button "好" with title "Codex-ZH"' >/dev/null 2>&1 || true
+  exit 1
+fi
+
+exec "$NODE" "$LAUNCHER" "$@"

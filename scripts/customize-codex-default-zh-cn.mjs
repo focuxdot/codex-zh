@@ -4,8 +4,13 @@ import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, write
 import path from "node:path";
 import process from "node:process";
 
+import {
+  patchRemoteExternalSessionRefreshMain,
+  patchRemoteExternalSessionRefreshPreload,
+} from "./lib/remote-refresh-inject.mjs";
+
 const usage = `Usage:
-  node scripts/customize-codex-default-zh-cn.mjs --asar-dir <extracted-app-asar-dir> [--asar-unpacked-dir <app.asar.unpacked-dir>] --work-dir <patched-work-dir> --out-asar <output-app.asar>
+  node scripts/customize-codex-default-zh-cn.mjs --asar-dir <extracted-app-asar-dir> [--asar-unpacked-dir <app.asar.unpacked-dir>] --work-dir <patched-work-dir> --out-asar <output-app.asar> [--platform windows|mac]
 
 Example:
   node scripts/customize-codex-default-zh-cn.mjs \\
@@ -13,6 +18,9 @@ Example:
     --asar-unpacked-dir /tmp/codex-win-research/app.asar.unpacked \\
     --work-dir /tmp/codex-win-research/asar-zh-cn \\
     --out-asar /tmp/codex-win-research/app.zh-CN.asar
+
+--platform defaults to windows. The macOS Codex bundle uses different Vite chunk
+names and minified identifiers, so it needs a separate patch set (--platform mac).
 `;
 
 const args = parseArgs(process.argv.slice(2));
@@ -20,6 +28,7 @@ const sourceDir = requiredPath(args["asar-dir"], "--asar-dir");
 const unpackedDir = args["asar-unpacked-dir"] ? requiredPath(args["asar-unpacked-dir"], "--asar-unpacked-dir") : "";
 const workDir = requiredPath(args["work-dir"], "--work-dir");
 const outAsar = requiredPath(args["out-asar"], "--out-asar");
+const platform = args.platform === "mac" ? "mac" : "windows";
 
 if (!existsSync(sourceDir)) {
   fail(`Source ASAR directory does not exist: ${sourceDir}`);
@@ -32,16 +41,27 @@ if (unpackedDir) {
   cpSync(unpackedDir, workDir, { recursive: true });
 }
 
-const patches = [
-  patchLocaleOverrideDefaults(workDir),
-  patchLocaleResolverDefault(workDir),
-  patchI18nOfflineDefault(workDir),
-  patchCodeVBrowserAvailability(workDir),
-  patchCodeVComputerUseAvailability(workDir),
-  patchCodeVDefaultFeatureOverrides(workDir),
-  patchWindowsMicaBackground(workDir),
-  patchStartupLoaderLightTheme(workDir),
-];
+const patches = platform === "mac"
+  ? [
+      patchMacLocaleOverrideDefault(workDir),
+      patchMacLocaleResolverDefault(workDir),
+      patchMacI18nOfflineDefault(workDir),
+      patchMacBrowserAvailability(workDir),
+      patchMacComputerUseAvailability(workDir),
+      patchMacDefaultFeatureOverrides(workDir),
+      patchRemoteExternalSessionRefreshMain(workDir),
+      patchRemoteExternalSessionRefreshPreload(workDir),
+    ]
+  : [
+      patchLocaleOverrideDefaults(workDir),
+      patchLocaleResolverDefault(workDir),
+      patchI18nOfflineDefault(workDir),
+      patchCodeVBrowserAvailability(workDir),
+      patchCodeVComputerUseAvailability(workDir),
+      patchCodeVDefaultFeatureOverrides(workDir),
+      patchWindowsMicaBackground(workDir),
+      patchStartupLoaderLightTheme(workDir),
+    ];
 
 for (const patch of patches) {
   if (patch.count === 0) {
@@ -51,17 +71,27 @@ for (const patch of patches) {
 
 mkdirSync(path.dirname(outAsar), { recursive: true });
 rmSync(outAsar, { force: true });
-run(process.platform === "win32" ? "npx.cmd" : "npx", [
-  "--yes",
-  "@electron/asar",
-  "pack",
-  "--unpack",
-  "*.{node,dll,exe}",
-  workDir,
-  outAsar,
-]);
 
-console.log(JSON.stringify({ workDir, outAsar, unpackedDir: unpackedDir || null, patches }, null, 2));
+// The unpack layout must match the original app.asar (which files live outside the
+// archive in app.asar.unpacked). Windows keeps the default *.{node,dll,exe}; the
+// macOS bundle unpacks whole native-module directories, so the staging step passes
+// an explicit --unpack-dir glob and disables the default --unpack via "none".
+const unpackGlob = args["unpack-glob"] === undefined ? "*.{node,dll,exe}" : args["unpack-glob"];
+const unpackDirGlob = args["unpack-dir-glob"];
+const packArgv = ["--yes", "@electron/asar", "pack"];
+if (unpackGlob && unpackGlob !== "none") {
+  packArgv.push("--unpack", unpackGlob);
+}
+if (unpackDirGlob) {
+  packArgv.push("--unpack-dir", unpackDirGlob);
+}
+packArgv.push(workDir, outAsar);
+run(process.platform === "win32" ? "npx.cmd" : "npx", packArgv);
+
+console.log(JSON.stringify({
+  platform, workDir, outAsar, unpackedDir: unpackedDir || null,
+  unpackGlob: unpackGlob || null, unpackDirGlob: unpackDirGlob || null, patches,
+}, null, 2));
 
 function patchLocaleOverrideDefaults(root) {
   let count = 0;
@@ -344,6 +374,151 @@ function patchStartupLoaderLightTheme(root) {
     writeFileSync(file, text);
   }
   return { name: "Codex-ZH light startup loader", count };
+}
+
+// ---------------------------------------------------------------------------
+// macOS patch set.
+//
+// The macOS Codex bundle ships the same features as Windows, but Vite emits
+// different content-hash chunk names (app-initial~app-main~*, general-settings-*,
+// page-*) and different minified identifiers, so the Windows string targets do
+// not match. These targets were derived from an official macOS arm64 Codex app.
+// Each anchors on stable, human-meaningful tokens (schema keys, string literals,
+// destructured parameter names) rather than build-specific outer symbol names,
+// so they survive minifier symbol churn but still fail loudly on real drift.
+//
+// Skipped vs Windows: the Mica background patch is Windows-only, and the startup
+// loader light-theme patch is cosmetic; neither is part of the macOS v1 set.
+
+function applyStringReplacements(text, pairs) {
+  let count = 0;
+  for (const [target, replacement] of pairs) {
+    const matches = text.split(target).length - 1;
+    if (matches > 0) {
+      text = text.split(target).join(replacement);
+      count += matches;
+    } else {
+      count += text.split(replacement).length - 1;
+    }
+  }
+  return { text, count };
+}
+
+function patchMacFilesWithReplacements({ root, dirs, pairs, name }) {
+  let count = 0;
+  const files = [];
+  for (const dir of dirs) {
+    files.push(...listFiles(path.join(root, ...dir.split("/")), ".js"));
+  }
+  for (const file of files) {
+    const text = readFileSync(file, "utf8");
+    const result = applyStringReplacements(text, pairs);
+    if (result.count > 0 && result.text !== text) {
+      writeFileSync(file, result.text);
+    }
+    count += result.count;
+  }
+  return { name, count };
+}
+
+function patchMacLocaleOverrideDefault(root) {
+  // The persisted "Explicit locale override" setting defaults to null; make it zh-CN.
+  // Present in a webview chunk and in .vite/build workers, so scan the whole tree.
+  return patchMacFilesWithReplacements({
+    root,
+    dirs: ["."],
+    name: "mac localeOverride default zh-CN",
+    pairs: [
+      [
+        "{agentAccess:`read-write`,default:null,description:`Explicit locale override`,key:`localeOverride`",
+        "{agentAccess:`read-write`,default:`zh-CN`,description:`Explicit locale override`,key:`localeOverride`",
+      ],
+    ],
+  });
+}
+
+function patchMacLocaleResolverDefault(root) {
+  // The i18n loaders declare `en-US` as the fallback locale immediately before an
+  // Object.assign map of ./locales/*.json chunks. Flip that fallback to zh-CN.
+  let count = 0;
+  const pattern = /`en-US`(,[A-Za-z0-9_$]{1,5}=Object\.assign\(\{"\.{1,2}\/locales\/)/g;
+  const patchedPattern = /`zh-CN`,[A-Za-z0-9_$]{1,5}=Object\.assign\(\{"\.{1,2}\/locales\//g;
+  for (const file of listFiles(path.join(root, "webview", "assets"), ".js")) {
+    const text = readFileSync(file, "utf8");
+    const matches = text.match(pattern)?.length ?? 0;
+    if (matches > 0) {
+      writeFileSync(file, text.replace(pattern, "`zh-CN`$1"));
+      count += matches;
+    } else {
+      count += text.match(patchedPattern)?.length ?? 0;
+    }
+  }
+  return { name: "mac locale resolver default zh-CN", count };
+}
+
+function patchMacI18nOfflineDefault(root) {
+  // One offline read of enable_i18n still defaults to false; force it true so the
+  // localized UI is used without waiting on a remote flag.
+  return patchMacFilesWithReplacements({
+    root,
+    dirs: ["webview/assets"],
+    name: "mac enable_i18n offline default true",
+    pairs: [["`enable_i18n`,!1)", "`enable_i18n`,!0)"]],
+  });
+}
+
+function patchMacBrowserAvailability(root) {
+  // Browser availability gate: drop the OAuth/Statsig (`statsig-disabled`) and
+  // sidebar/agent-gate branches so an API-key session still reports `available`.
+  return patchMacFilesWithReplacements({
+    root,
+    dirs: ["webview/assets"],
+    name: "mac browser availability ignores OAuth Statsig gates",
+    pairs: [
+      [
+        "({isBrowserAgentGateEnabled:e,isBrowserSidebarEnabled:t,isBrowserUseEnabled:n,isLoading:r,runCodexInWsl:i,windowType:a}){return a===`chrome-extension`?`window-type-disabled`:r?`loading`:t?e?n?i?`wsl-disabled`:`available`:`config-requirement-disabled`:`statsig-disabled`:`browser-pane-disabled`}",
+        "({isBrowserAgentGateEnabled:e,isBrowserSidebarEnabled:t,isBrowserUseEnabled:n,isLoading:r,runCodexInWsl:i,windowType:a}){return a===`chrome-extension`?`window-type-disabled`:i?`wsl-disabled`:n===!1?`config-requirement-disabled`:`available`}",
+      ],
+    ],
+  });
+}
+
+function patchMacComputerUseAvailability(root) {
+  // Computer Use availability gate: drop the Statsig gate branch (`r?...:statsig-disabled`)
+  // so it reports `available` under an API-key session on a supported platform.
+  return patchMacFilesWithReplacements({
+    root,
+    dirs: ["webview/assets"],
+    name: "mac computer use availability ignores OAuth Statsig gate",
+    pairs: [
+      [
+        "({areRequiredFeaturesEnabled:e,enabled:t,isAnyFeatureLoading:n,isComputerUseGateEnabled:r,isHostCompatiblePlatform:i,isPlatformLoading:a,windowType:o}){return t?o===`electron`?r?a?`loading`:i?n?`loading`:e?`available`:`config-requirement-disabled`:`unsupported-platform`:`statsig-disabled`:`window-type-disabled`:`disabled`}",
+        "({areRequiredFeaturesEnabled:e,enabled:t,isAnyFeatureLoading:n,isComputerUseGateEnabled:r,isHostCompatiblePlatform:i,isPlatformLoading:a,windowType:o}){return t?o===`electron`?a?`loading`:i?n?`loading`:e?`available`:`config-requirement-disabled`:`unsupported-platform`:`window-type-disabled`:`disabled`}",
+      ],
+    ],
+  });
+}
+
+function patchMacDefaultFeatureOverrides(root) {
+  // Enable the browser/computer-use experimental features by default: add them to
+  // the known-feature list and inject default overrides when none are set.
+  const defaultOverrides =
+    "{apps:!0,auth_elicitation:!0,enable_mcp_apps:!0,plugins:!0,tool_call_mcp_elicitation:!0,tool_search:!0,tool_suggest:!0,browser_use:!0,browser_use_external:!0,in_app_browser:!0}";
+  return patchMacFilesWithReplacements({
+    root,
+    dirs: ["webview/assets"],
+    name: "mac default desktop experimental feature overrides",
+    pairs: [
+      [
+        "A7=[`apps_mcp_path_override`,`auth_elicitation`,`memories`,`tool_suggest`],j7=",
+        "A7=[`apps`,`apps_mcp_path_override`,`auth_elicitation`,`enable_mcp_apps`,`memories`,`plugins`,`tool_call_mcp_elicitation`,`tool_search`,`tool_suggest`,`browser_use`,`browser_use_external`,`in_app_browser`],j7=",
+      ],
+      [
+        "if(Ts(`set-default-feature-overrides`,{overrides:n??null}),n==null)return;let i=Vue(n,r),",
+        `let codevFeatureOverrides=n??${defaultOverrides};Ts(\`set-default-feature-overrides\`,{overrides:codevFeatureOverrides});let i=Vue(codevFeatureOverrides,r),`,
+      ],
+    ],
+  });
 }
 
 function listFiles(root, suffix) {
