@@ -2,7 +2,7 @@
 // 仅缓存静态壳（HTML/manifest/图标），让"添加到主屏幕"离线也能打开界面。
 // 绝不缓存动态数据——会话内容走 WebSocket（不经 SW），故无需担心陈旧数据。
 // 更新策略：导航请求 network-first（始终尝试拿最新 index.html），离线回退缓存。
-const CACHE = "czr-shell-v1";
+const CACHE = "czr-shell-v2";
 const SHELL = [
   "./",
   "./index.html",
