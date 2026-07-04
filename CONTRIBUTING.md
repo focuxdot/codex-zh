@@ -53,6 +53,8 @@ Codex-ZH faces Chinese-speaking users, so future logs and release-facing copy sh
 
 Maintainers pushing directly to this repository must use the mandatory push wrapper in [OPEN_SOURCE_READINESS.md](OPEN_SOURCE_READINESS.md#mandatory-maintainer-push-check): run `npm run push:check`, then push with `npm run push:maintainer -- origin main` or `npm run push:maintainer -- origin <tag>`. Do not use plain `git push` from a workstation. The push wrapper also rejects locally authored commit subjects that do not contain Chinese text.
 
+Repository-specific GitHub accounts, SSH keys, and commit author identities must be configured with `git config --local`, never `git config --global`. Local config applies only to this checkout; global config would affect unrelated repositories on the same workstation.
+
 ## Reporting Issues
 
 Use GitHub Issues and include:

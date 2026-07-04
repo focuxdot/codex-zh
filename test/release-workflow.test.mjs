@@ -49,11 +49,27 @@ test("release workflow packages Windows installer after GitHub Release publish",
   assert.doesNotMatch(workflow, /Automated Windows package build/u);
   assert.doesNotMatch(workflow, /安装包已自动构建完成/u);
   assert.match(workflow, /gh release upload \$env:RELEASE_TAG @assets --clobber/u);
-  assert.match(workflow, /node \.\\scripts\\update-readme-downloads\.mjs/u);
+  // README download links are updated in a shared job (bash), gathering both platforms' checksums.
+  assert.match(workflow, /node \.\/scripts\/update-readme-downloads\.mjs/u);
   assert.match(workflow, /git checkout -B main origin\/main/u);
-  assert.match(workflow, /docs: 更新 \$env:RELEASE_TAG 下载链接/u);
+  assert.match(workflow, /docs: 更新 \$RELEASE_TAG 下载链接/u);
   assert.doesNotMatch(workflow, /docs: update README download links/u);
   assert.match(workflow, /git push origin HEAD:main/u);
+});
+
+test("release workflow builds the macOS arm64 dmg alongside the Windows installer", () => {
+  assert.match(workflow, /macos-installer:/u);
+  assert.match(workflow, /runs-on: macos-14/u);
+  assert.match(workflow, /CODEX_MACOS_APP_DMG_URL/u);
+  assert.match(workflow, /CODEX_MACOS_APP_DMG_SHA256/u);
+  assert.match(workflow, /Set CODEX_MACOS_APP_DMG_URL to a pinned official Codex macOS dmg/u);
+  assert.match(workflow, /Source dmg SHA-256 mismatch/u);
+  assert.match(workflow, /scripts\/build-codex-zh-staging-mac\.mjs/u);
+  assert.match(workflow, /scripts\/build-codex-zh-dmg-mac\.mjs/u);
+  assert.match(workflow, /codex-zh-launcher\.mjs" --self-test --print-result/u);
+  assert.match(workflow, /gh release upload "\$RELEASE_TAG" "\$RELEASE_OUTPUT_DIR"\/\*\.dmg/u);
+  // The dmg job must pin the source like the Windows job (no unpinned downloads).
+  assert.doesNotMatch(workflow, /hdiutil attach "\$SOURCE_DMG"[^\n]*\n[^\n]*ditto/u);
 });
 
 test("release workflow keeps source app binary out of the repository", () => {
@@ -75,11 +91,17 @@ test("maintainer push docs require the checked SSH wrapper", () => {
   assert.match(maintainerPush, /GIT_SSH_COMMAND/u);
   assert.match(readiness, /Do not run a plain `git push origin main`/u);
   assert.match(readiness, /codex-zh\.githubSshKey/u);
+  assert.match(readiness, /This must stay repository-local/u);
+  assert.match(readiness, /Do not use `git config --global`/u);
+  assert.match(readiness, /git config --local user\.name/u);
+  assert.match(readiness, /git config --local user\.email/u);
+  assert.match(readiness, /do not change other projects/u);
   assert.match(readiness, /npm run push:check/u);
   assert.match(readiness, /npm run push:maintainer -- origin main/u);
   assert.match(readiness, /npm run push:maintainer -- origin v0\.1\.2/u);
   assert.match(readiness, /gh auth status` alone is not enough/u);
   assert.match(contributing, /Do not use plain `git push` from a workstation/u);
+  assert.match(contributing, /must be configured with `git config --local`, never `git config --global`/u);
   assert.doesNotMatch(readiness, /github_[a-z0-9_]+_account/u);
   assert.doesNotMatch(maintainerPush, /github_[a-z0-9_]+_account/u);
 });

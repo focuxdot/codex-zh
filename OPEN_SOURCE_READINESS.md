@@ -33,11 +33,22 @@ Required one-time local setup:
 git config --local codex-zh.githubSshKey /absolute/path/to/maintainer/github/key
 ```
 
+This must stay repository-local. Use `git config --local` so the value is written to this checkout's `.git/config` only. Do not use `git config --global` for repository-specific GitHub accounts, SSH keys, or author identities, because global config affects other repositories on the same workstation.
+
 If the GitHub login account is not the repository owner, also configure:
 
 ```bash
 git config --local codex-zh.githubAccount expected-github-account
 ```
+
+Repository-specific commit author identity should also be local-only:
+
+```bash
+git config --local user.name "expected-github-account"
+git config --local user.email "github-noreply-email@example.com"
+```
+
+These local author settings take precedence inside this repository but do not change other projects. Other repositories should keep their own local identities or the user's global Git identity.
 
 Required local check:
 

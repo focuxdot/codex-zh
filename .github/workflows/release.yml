@@ -25,6 +25,14 @@ on:
         description: "Optional label used in the installer filename, for example Codex-26.608.1337.0."
         required: false
         type: string
+      source_codex_macos_dmg_url:
+        description: "Public URL to the official Codex macOS arm64 .dmg. Prefer the repository secret for private URLs."
+        required: false
+        type: string
+      source_codex_macos_dmg_sha256:
+        description: "Optional SHA-256 for the macOS source dmg."
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -269,29 +277,139 @@ jobs:
           }
           & gh release upload $env:RELEASE_TAG @assets --clobber
 
-      - name: Update README download links
-        if: github.event_name == 'release' || github.event_name == 'push'
-        shell: powershell
+  macos-installer:
+    name: Build macOS dmg
+    if: startsWith(github.event.release.tag_name || github.ref_name, 'v')
+    needs: windows-installer
+    runs-on: macos-14
+    env:
+      CODEX_MACOS_APP_DMG_URL: ${{ secrets.CODEX_MACOS_APP_DMG_URL }}
+      CODEX_MACOS_APP_DMG_SHA256: ${{ secrets.CODEX_MACOS_APP_DMG_SHA256 }}
+      SOURCE_MACOS_DMG_URL_INPUT: ${{ inputs.source_codex_macos_dmg_url }}
+      SOURCE_MACOS_DMG_SHA256_INPUT: ${{ inputs.source_codex_macos_dmg_sha256 }}
+      VERSION_INPUT: ${{ inputs.version }}
+      RELEASE_TAG: ${{ github.event.release.tag_name || github.ref_name }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+
+      - name: Run tests
+        run: npm test
+
+      - name: Resolve release version
         run: |
+          version="${VERSION_INPUT:-$RELEASE_TAG}"
+          if [ -z "$version" ]; then version="$(node -p "require('./package.json').version")"; fi
+          version="${version#refs/tags/}"; version="${version#v}"
+          if ! printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+([-.+][0-9A-Za-z.-]+)?$'; then
+            echo "Version must look like SemVer. Got: $version"; exit 1
+          fi
+          echo "CODEX_ZH_VERSION=$version" >> "$GITHUB_ENV"
+          echo "SOURCE_DMG=$RUNNER_TEMP/codex-macos-app.dmg" >> "$GITHUB_ENV"
+          echo "SOURCE_MOUNT=$RUNNER_TEMP/codex-src-mnt" >> "$GITHUB_ENV"
+          echo "STAGING_DIR=$RUNNER_TEMP/staging" >> "$GITHUB_ENV"
+          echo "RELEASE_OUTPUT_DIR=$RUNNER_TEMP/release" >> "$GITHUB_ENV"
+
+      - name: Download official Codex macOS app source
+        run: |
+          url="${SOURCE_MACOS_DMG_URL_INPUT:-$CODEX_MACOS_APP_DMG_URL}"
+          [ -n "$url" ] || { echo "Set CODEX_MACOS_APP_DMG_URL to a pinned official Codex macOS dmg."; exit 1; }
+          hash="${SOURCE_MACOS_DMG_SHA256_INPUT:-$CODEX_MACOS_APP_DMG_SHA256}"
+          [ -n "$hash" ] || { echo "Set CODEX_MACOS_APP_DMG_SHA256 so release builds are pinned."; exit 1; }
+          curl -fsSL "$url" -o "$SOURCE_DMG"
+          actual="$(shasum -a 256 "$SOURCE_DMG" | awk '{print $1}')"
+          expected="$(printf '%s' "$hash" | tr 'A-F' 'a-f')"
+          [ "$actual" = "$expected" ] || { echo "Source dmg SHA-256 mismatch. Expected $expected, got $actual."; exit 1; }
+
+      - name: Extract Codex.app from source dmg
+        run: |
+          hdiutil attach "$SOURCE_DMG" -nobrowse -readonly -mountpoint "$SOURCE_MOUNT"
+          app="$(find "$SOURCE_MOUNT" -maxdepth 2 -type d -name 'Codex.app' | head -1)"
+          if [ -z "$app" ]; then echo "Codex.app not found in source dmg."; hdiutil detach "$SOURCE_MOUNT" || true; exit 1; fi
+          ditto "$app" "$RUNNER_TEMP/Codex.app"
+          hdiutil detach "$SOURCE_MOUNT"
+          echo "CODEX_SOURCE_APP=$RUNNER_TEMP/Codex.app" >> "$GITHUB_ENV"
+
+      - name: Build staged app and dmg
+        run: |
+          node scripts/build-codex-zh-staging-mac.mjs --source-app "$CODEX_SOURCE_APP" --out-dir "$STAGING_DIR" --version "$CODEX_ZH_VERSION"
+          node scripts/build-codex-zh-dmg-mac.mjs --app "$STAGING_DIR/Codex-ZH.app" --out-dir "$RELEASE_OUTPUT_DIR" --version "$CODEX_ZH_VERSION"
+
+      - name: Smoke test built app
+        run: |
+          APP="$STAGING_DIR/Codex-ZH.app"
+          codesign --verify --deep --strict "$APP"
+          # Run the orchestrator self-test with the runner's Node (avoids depending on
+          # the bundle's re-signed Node under CI security policy).
+          result="$(CODEX_ZH_APP_ROOT="$APP" node "$APP/Contents/Resources/codex-zh/launcher/mac/codex-zh-launcher.mjs" --self-test --print-result)"
+          echo "$result"
+          printf '%s' "$result" | grep -q '"status":"ok"' || { echo "Launcher self-test failed."; exit 1; }
+          ls "$RELEASE_OUTPUT_DIR"/*.dmg >/dev/null
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: codex-zh-macos-dmg
+          path: |
+            ${{ env.RELEASE_OUTPUT_DIR }}/*.dmg
+            ${{ env.RELEASE_OUTPUT_DIR }}/*.sha256
+          if-no-files-found: error
+
+      - name: Upload release assets
+        if: github.event_name == 'release' || github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "$RELEASE_TAG" "$RELEASE_OUTPUT_DIR"/*.dmg "$RELEASE_OUTPUT_DIR"/*.dmg.sha256 --clobber
+
+  update-readme:
+    name: Update README download links
+    if: (github.event_name == 'release' || github.event_name == 'push') && (always() && needs.windows-installer.result == 'success')
+    needs: [windows-installer, macos-installer]
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ github.event.release.tag_name || github.ref_name }}
+      VERSION_INPUT: ${{ inputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+
+      - name: Gather release checksums and update README
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${VERSION_INPUT:-$RELEASE_TAG}"
+          version="${version#refs/tags/}"; version="${version#v}"
+          checksums="$RUNNER_TEMP/checksums"
+          mkdir -p "$checksums"
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern '*.sha256' --dir "$checksums" || true
+          if [ -z "$(ls -A "$checksums" 2>/dev/null)" ]; then
+            echo "No checksum assets found for $RELEASE_TAG; skipping README update."; exit 0
+          fi
+
           git fetch origin main
           git checkout -B main origin/main
+          node ./scripts/update-readme-downloads.mjs \
+            --release-output-dir "$checksums" \
+            --repo "$GITHUB_REPOSITORY" \
+            --tag "$RELEASE_TAG" \
+            --version "$version"
 
-          node .\scripts\update-readme-downloads.mjs `
-            --release-output-dir $env:RELEASE_OUTPUT_DIR `
-            --repo $env:GITHUB_REPOSITORY `
-            --tag $env:RELEASE_TAG `
-            --version $env:CODEX_ZH_VERSION
-
-          $readmeStatus = git status --porcelain README.md
-          if (!$readmeStatus) {
-            Write-Host "README download links already match $env:RELEASE_TAG."
-            $global:LASTEXITCODE = 0
-            exit 0
-          }
-
+          if [ -z "$(git status --porcelain README.md)" ]; then
+            echo "README download links already match $RELEASE_TAG."; exit 0
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add README.md
-          git commit -m "docs: 更新 $env:RELEASE_TAG 下载链接"
+          git commit -m "docs: 更新 $RELEASE_TAG 下载链接"
           git push origin HEAD:main
-          $global:LASTEXITCODE = 0

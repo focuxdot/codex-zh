@@ -15,10 +15,17 @@ runbooks/private/
 *.local.*
 *.secret.*
 *.asar
+# Codex 打包的 rolldown 代码分割块（文件名带 ~），extract/patch 时可能误落到 cwd
+*~*.js
 *.msix
 *.appx
 *.exe
+*.dmg
+*.app/
 *.zip
 *.sha256
+codex-zh-build-mac.json
+codex-zh-dmg-mac.json
 config.toml
 secrets.*
+.gstack/

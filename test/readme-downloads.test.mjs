@@ -1,10 +1,15 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import {
   DOWNLOADS_END,
   DOWNLOADS_START,
   buildAssetDownloadUrl,
+  findReleaseAssets,
   generateDownloadBlock,
   updateDownloadsSection,
 } from "../scripts/update-readme-downloads.mjs";
@@ -34,6 +39,45 @@ test("generateDownloadBlock gives non-technical users a direct Windows installer
   assert.match(block, /下载 Codex-ZH 0\.1\.1 Windows x64 安装包/u);
   assert.match(block, /不要下载 GitHub 页面里的 `Source code`/u);
   assert.match(block, /54aadeb761320de0267a5636552ca1df90488b449f5c9a96781c92a8d6114651/u);
+});
+
+test("generateDownloadBlock renders a macOS arm64 dmg row when a dmg asset exists", () => {
+  const block = generateDownloadBlock({
+    repo: "focuxdot/codex-zh",
+    tag: "v0.1.2",
+    version: "0.1.2",
+    installerName: "OpenAI.Codex-26.608.1337.0+Codex-ZH-0.1.2-win-x64.exe",
+    sha256Name: "OpenAI.Codex-26.608.1337.0+Codex-ZH-0.1.2-win-x64.exe.sha256",
+    sha256: "54aadeb761320de0267a5636552ca1df90488b449f5c9a96781c92a8d6114651",
+    dmgName: "Codex-ZH-0.1.2-mac-arm64.dmg",
+    dmgSha256Name: "Codex-ZH-0.1.2-mac-arm64.dmg.sha256",
+    dmgSha256: "97730f8af1815088f88efb9dba009925805c9da8ae92fc54d6bd13f944a538f4",
+  });
+
+  assert.match(block, /macOS（Apple 芯片 \/ arm64）/u);
+  assert.match(block, /下载 Codex-ZH 0\.1\.2 macOS arm64 安装包/u);
+  assert.match(block, /Codex-ZH-0\.1\.2-mac-arm64\.dmg/u);
+  assert.match(block, /97730f8af1815088f88efb9dba009925805c9da8ae92fc54d6bd13f944a538f4/u);
+  // Both platforms present, so neither should say 暂不提供.
+  assert.doesNotMatch(block, /macOS \| 暂不提供/u);
+});
+
+test("findReleaseAssets discovers both Windows and macOS assets from .sha256 files", () => {
+  const dir = mkdtempSync(join(tmpdir(), "codex-zh-assets-"));
+  writeFileSync(
+    join(dir, "OpenAI.Codex-26.608.1337.0+Codex-ZH-0.1.2-win-x64.exe.sha256"),
+    "54aadeb761320de0267a5636552ca1df90488b449f5c9a96781c92a8d6114651  OpenAI.Codex-26.608.1337.0+Codex-ZH-0.1.2-win-x64.exe\n",
+  );
+  writeFileSync(
+    join(dir, "Codex-ZH-0.1.2-mac-arm64.dmg.sha256"),
+    "97730f8af1815088f88efb9dba009925805c9da8ae92fc54d6bd13f944a538f4  Codex-ZH-0.1.2-mac-arm64.dmg\n",
+  );
+
+  const assets = findReleaseAssets(dir);
+  assert.equal(assets.windows.name, "OpenAI.Codex-26.608.1337.0+Codex-ZH-0.1.2-win-x64.exe");
+  assert.equal(assets.windows.sha256, "54aadeb761320de0267a5636552ca1df90488b449f5c9a96781c92a8d6114651");
+  assert.equal(assets.macos.name, "Codex-ZH-0.1.2-mac-arm64.dmg");
+  assert.equal(assets.macos.sha256, "97730f8af1815088f88efb9dba009925805c9da8ae92fc54d6bd13f944a538f4");
 });
 
 test("updateDownloadsSection replaces only the marked README downloads block", () => {
