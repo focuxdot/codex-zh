@@ -4,34 +4,40 @@
 const TIMEOUT_MS = 8000;
 
 // 构造单个 provider 的请求。返回 { url, init } 供 fetch 调用。
-export function buildRequest(n, title, body) {
+// link 为可选深链（打开手机端并直达对应会话），只含 webUrl + 会话 id，不含内容。
+export function buildRequest(n, title, body, link) {
   switch (n.type) {
     case "bark": {
       // Bark（iOS，开源自托管友好）。默认官方服务器，可用 server 覆盖。
+      // url 字段：点通知直接打开手机端页面。
       const base = (n.server || "https://api.day.app").replace(/\/$/, "");
       return {
         url: `${base}/${encodeURIComponent(n.key)}`,
-        init: json({ title, body, group: "Codex-ZH" }),
+        init: json({ title, body, group: "Codex-ZH", ...(link ? { url: link } : {}) }),
       };
     }
     case "serverchan":
       // Server 酱（微信推送）
       return {
         url: `https://sctapi.ftqq.com/${encodeURIComponent(n.key)}.send`,
-        init: json({ title, desp: body }),
+        init: json({ title, desp: link ? `${body}\n\n[打开 Codex 远程](${link})` : body }),
       };
     case "wecom":
       // 企业微信群机器人
-      return { url: n.url, init: json({ msgtype: "text", text: { content: `${title}\n${body}` } }) };
+      return { url: n.url, init: json({ msgtype: "text", text: { content: withLink(title, body, link) } }) };
     case "dingtalk":
       // 钉钉群机器人
-      return { url: n.url, init: json({ msgtype: "text", text: { content: `${title}\n${body}` } }) };
+      return { url: n.url, init: json({ msgtype: "text", text: { content: withLink(title, body, link) } }) };
     case "custom":
-      // 自定义 webhook：收 {title, body, source}
-      return { url: n.url, init: json({ title, body, source: "codex-zh-remote" }) };
+      // 自定义 webhook：收 {title, body, source, link?}
+      return { url: n.url, init: json({ title, body, source: "codex-zh-remote", ...(link ? { link } : {}) }) };
     default:
       return null;
   }
+}
+
+function withLink(title, body, link) {
+  return link ? `${title}\n${body}\n${link}` : `${title}\n${body}`;
 }
 
 function json(obj) {
@@ -71,11 +77,11 @@ export class Notifier {
   }
 
   // 并发发送到所有已配置渠道；单个失败不影响其他，只记日志
-  async send(title, body) {
+  async send(title, body, link) {
     if (this.#notifiers.length === 0) return;
     await Promise.allSettled(
       this.#notifiers.map(async (n) => {
-        const req = buildRequest(n, title, body);
+        const req = buildRequest(n, title, body, link);
         if (!req?.url) return;
         try {
           const res = await this.#fetch(req.url, {

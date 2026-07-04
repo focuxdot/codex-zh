@@ -1,7 +1,8 @@
 // daemon 与 relay 的出站长连接：注册、心跳、指数退避重连、按 cid 路由
 const HEARTBEAT_MS = 25000;
+const HB_TIMEOUT_MS = 10000; // hb 发出后这么久没回包即判链路死亡（网络切换/唤醒后 TCP 假活）
 const BACKOFF_BASE_MS = 1000;
-const BACKOFF_MAX_MS = 60000;
+const BACKOFF_MAX_MS = 15000; // 上限太高会让电脑唤醒后长时间假离线
 
 export class RelayLink {
   #url;
@@ -9,6 +10,7 @@ export class RelayLink {
   #ws = null;
   #attempt = 0;
   #heartbeat = null;
+  #lastPong = 0;
   #closed = false;
 
   constructor(relayUrl, daemonId, handlers) {
@@ -26,8 +28,9 @@ export class RelayLink {
     ws.onopen = () => {
       this.#attempt = 0;
       this.#ws = ws;
+      this.#lastPong = Date.now();
       this.#handlers.log(`已连接 relay: ${this.#url}`);
-      this.#heartbeat = setInterval(() => this.#sendRaw({ t: "hb" }), HEARTBEAT_MS);
+      this.#heartbeat = setInterval(() => this.#beat(ws), HEARTBEAT_MS);
       this.#heartbeat.unref?.();
     };
     ws.onmessage = (event) => {
@@ -48,6 +51,7 @@ export class RelayLink {
           this.#handlers.onClose(frame.cid);
           break;
         case "hb":
+          this.#lastPong = Date.now();
           break;
         default:
           break; // 未知帧忽略，保证向前兼容
@@ -55,6 +59,21 @@ export class RelayLink {
     };
     ws.onclose = () => this.#onDisconnect();
     ws.onerror = () => {};
+  }
+
+  // 心跳发出后限时验收回包。TCP 假活时 send 不报错、onclose 几分钟不来，
+  // 只有"发了没回"能及时暴露死链——超时就摘回调、掐连接、走重连。
+  #beat(ws) {
+    const sentAt = Date.now();
+    this.#sendRaw({ t: "hb" });
+    setTimeout(() => {
+      if (this.#closed || this.#ws !== ws) return; // 已换连接/已停止
+      if (this.#lastPong >= sentAt) return;
+      this.#handlers.log("relay 心跳超时，判定链路死亡，重连");
+      ws.onclose = null;
+      try { ws.close(); } catch {}
+      this.#onDisconnect();
+    }, HB_TIMEOUT_MS).unref?.();
   }
 
   #onDisconnect() {

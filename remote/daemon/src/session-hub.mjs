@@ -58,6 +58,11 @@ export class SessionHub {
     if (this.#subscribers.get(threadId)?.size === 0) this.#subscribers.delete(threadId);
   }
 
+  // 引擎（app-server）掉线/恢复时广播给所有设备（连接状态分层诊断用）
+  broadcastEngineState(healthy) {
+    for (const client of this.#clients) client.pushEngineState(healthy);
+  }
+
   // —— 看板状态 ——
   isRunning(threadId) {
     return this.#currentTurn.has(threadId);
@@ -70,9 +75,26 @@ export class SessionHub {
   }
 
   // —— 驱动：确保会话已 resume，然后发消息 ——
-  async sendMessage(threadId, text) {
+  // imageUrls：data: URL 数组（手机上传的附图）。桌面端对 data URL 同样走
+  // {type:"image",url} 输入项，这是已验证的路径，不需要落临时文件。
+  // overrides：按轮 override（model/effort/approvalPolicy/sandboxPolicy/plan，
+  // 已在 client-session 白名单过滤）。plan 展开为 collaborationMode（实测形状：
+  // {mode:"plan",settings:{model}}，settings.model 必填，缺省用引擎默认模型）
+  async sendMessage(threadId, text, imageUrls = [], overrides) {
     await this.#ensureResumed(threadId);
-    const result = await this.#appServer.startTurn(threadId, text);
+    const input = [
+      ...imageUrls.map((url) => ({ type: "image", url })),
+      ...(text ? [{ type: "text", text }] : []),
+    ];
+    const { plan, ...rest } = overrides ?? {};
+    if (plan) {
+      const model = rest.model ?? (await this.#defaultModel());
+      rest.collaborationMode = {
+        mode: "plan",
+        settings: { model, ...(rest.effort ? { effort: rest.effort } : {}) },
+      };
+    }
+    const result = await this.#appServer.startTurn(threadId, input, rest);
     const turnId = result?.turnId ?? result?.turn?.id ?? null;
     if (turnId) this.#currentTurn.set(threadId, turnId);
     this.#updateAwake();
@@ -85,6 +107,39 @@ export class SessionHub {
     if (!turnId) return { ok: false, reason: "无进行中的轮次" };
     await this.#appServer.interruptTurn(threadId, turnId);
     return { ok: true };
+  }
+
+  // —— 会话目标（官方 App 的 Pursue goal）——
+  async setGoal(threadId, goal) {
+    await this.#ensureResumed(threadId);
+    if (goal) {
+      await this.#appServer.request("thread/goal/set", { threadId, goal });
+    } else {
+      await this.#appServer.request("thread/goal/clear", { threadId });
+    }
+    return { ok: true };
+  }
+
+  async getGoal(threadId) {
+    await this.#ensureResumed(threadId);
+    try {
+      const r = await this.#appServer.request("thread/goal/get", { threadId });
+      // 响应形状未定稿（experimental）：兼容 {goal} / {data:{goal}} / {data:"..."}
+      const goal = r?.goal ?? r?.data?.goal ?? (typeof r?.data === "string" ? r.data : null);
+      return { goal: typeof goal === "string" ? goal : null };
+    } catch {
+      return { goal: null };
+    }
+  }
+
+  // 引擎默认模型（计划模式 settings.model 必填时的兜底），进程内缓存一次
+  #modelDefault = null;
+  async #defaultModel() {
+    if (this.#modelDefault) return this.#modelDefault;
+    const r = await this.#appServer.request("model/list", {});
+    const models = r?.data ?? [];
+    this.#modelDefault = (models.find((m) => m.isDefault) ?? models[0])?.model ?? "gpt-5.5";
+    return this.#modelDefault;
   }
 
   async newThread(cwd) {
@@ -122,11 +177,14 @@ export class SessionHub {
       this.#updateAwake();
       this.#broadcastBoard(threadId);
     }
-    if (method === "turn/completed") {
+    // failed/aborted 同样要清运行状态，否则看板"运行中"永远卡住
+    if (method === "turn/completed" || method === "turn/failed" || method === "turn/aborted") {
       this.#currentTurn.delete(threadId);
       this.#updateAwake();
       this.#broadcastBoard(threadId);
-      this.#onEvent("turnCompleted", { sessionId: threadId, clientsOnline: this.#clients.size });
+      if (method === "turn/completed") {
+        this.#onEvent("turnCompleted", { sessionId: threadId, clientsOnline: this.#clients.size });
+      }
     }
     const subs = this.#subscribers.get(threadId);
     if (!subs) return;

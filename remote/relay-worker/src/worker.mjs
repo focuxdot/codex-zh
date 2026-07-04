@@ -27,6 +27,11 @@ export class RelayRoom {
 
   constructor(state) {
     this.#state = state;
+    // hb 在边缘自动应答：不唤醒 DO（省 duration 计费），daemon 与手机端通用。
+    // 匹配是逐字符的，两端发送串必须与这里完全一致。
+    this.#state.setWebSocketAutoResponse(
+      new WebSocketRequestResponsePair('{"t":"hb"}', '{"t":"hb"}'),
+    );
   }
 
   async fetch(request) {
@@ -48,7 +53,10 @@ export class RelayRoom {
       const cid = `c${crypto.randomUUID().slice(0, 8)}`;
       this.#state.acceptWebSocket(serverEnd, ["client", `cid:${cid}`]);
       serverEnd.serializeAttachment({ cid });
-      serverEnd.send(JSON.stringify({ t: "status", online: this.#daemon() !== null }));
+      const online = this.#daemon() !== null;
+      // lastSeen 存 DO storage，跨 hibernation/迁移仍可用
+      const lastSeen = online ? null : ((await this.#state.storage.get("lastSeen")) ?? null);
+      serverEnd.send(JSON.stringify({ t: "status", online, lastSeen }));
       this.#daemon()?.send(JSON.stringify({ t: "open", cid }));
     }
     return new Response(null, { status: 101, webSocket: clientEnd });
@@ -73,14 +81,16 @@ export class RelayRoom {
     }
   }
 
-  webSocketClose(ws) {
+  async webSocketClose(ws) {
     const tags = this.#state.getTags(ws);
     if (tags.includes("daemon")) {
       // 仅当没有其他 daemon 连接（如顶替的新连接）时才广播下线；
       // 关闭回调执行时自身可能仍在 getWebSockets 列表里，须按身份排除
       const others = this.#state.getWebSockets("daemon").filter((s) => s !== ws);
       if (others.length === 0) {
-        this.#broadcastToClients({ t: "status", online: false });
+        const lastSeen = Date.now();
+        await this.#state.storage.put("lastSeen", lastSeen);
+        this.#broadcastToClients({ t: "status", online: false, lastSeen });
       }
       return;
     }
@@ -108,6 +118,10 @@ export class RelayRoom {
   }
 
   #fromClient(ws, frame) {
+    if (frame.t === "hb") {
+      ws.send('{"t":"hb"}'); // 兜底：auto-response 未生效（非休眠路径）时仍应答
+      return;
+    }
     if (frame.t !== "msg") return;
     const cid = ws.deserializeAttachment()?.cid;
     if (!cid) return;

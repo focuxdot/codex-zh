@@ -59,7 +59,10 @@ node remote/daemon/src/main.mjs start --relay wss://relay.你的域名
 
 - Durable Objects 使用 SQLite 存储类，配 WebSocket Hibernation API（空闲连接
   不计 duration），小规模用量落在免费额度内；超出后 Workers 付费档约 $5/月。
-- relay 无状态、无数据库、不落盘任何流量，运维成本极低。
+- relay 近乎无状态、不落盘任何流量（DO storage 仅存 daemon 最近离线时刻一个时间戳，
+  供手机端显示"上次在线"），运维成本极低。
+- 仓库更新 relay 代码后，重新 `npx wrangler deploy` 即可升级；协议增量向后兼容，
+  旧版 relay 不影响核心功能，只是缺少新增的增强字段（如 status 帧的 `lastSeen`）。
 
 ## 不想用 Cloudflare？
 

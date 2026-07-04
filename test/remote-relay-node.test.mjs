@@ -34,7 +34,7 @@ test("帧编解码往返（含掩码帧与分片长度档）", () => {
   assert.deepEqual(frame.payload, Buffer.from("hello"));
 });
 
-test("relay 撮合：daemon 与 client 互通、状态广播", async () => {
+test("relay 撮合：daemon 与 client 互通、状态广播", async (t) => {
   const server = createRelayServer();
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
@@ -46,15 +46,17 @@ test("relay 撮合：daemon 与 client 互通、状态广播", async () => {
   const client = new WebSocket(`${base}/client/${daemonId}`);
   const clientQueue = makeQueue(client, received.client);
   await once2(client, "open");
+  // 断言失败也保证关闭 socket/server，否则遗留句柄会让进程吊死到测试超时
+  t.after(() => { client.close(); server.close(); });
 
-  // daemon 未上线时 client 收到 offline 状态
-  assert.deepEqual(await clientQueue.next(), { t: "status", online: false });
+  // daemon 未上线时 client 收到 offline 状态（lastSeen 初始为 null）
+  assert.deepEqual(await clientQueue.next(), { t: "status", online: false, lastSeen: null });
 
   const daemon = new WebSocket(`${base}/daemon/${daemonId}`);
   const daemonQueue = makeQueue(daemon, received.daemon);
   await once2(daemon, "open");
 
-  // daemon 上线广播 + open 帧
+  // daemon 上线广播（在线态不带 lastSeen） + open 帧
   assert.deepEqual(await clientQueue.next(), { t: "status", online: true });
   const openFrame = await daemonQueue.next();
   assert.equal(openFrame.t, "open");
@@ -72,9 +74,12 @@ test("relay 撮合：daemon 与 client 互通、状态广播", async () => {
   daemon.send(JSON.stringify({ t: "hb" }));
   assert.deepEqual(await daemonQueue.next(), { t: "hb" });
 
-  // daemon 下线 -> client 收 offline
+  // daemon 下线 -> client 收 offline，并带上最近在线时间戳（动态值，校验类型）
   daemon.close();
-  assert.deepEqual(await clientQueue.next(), { t: "status", online: false });
+  const offline = await clientQueue.next();
+  assert.equal(offline.t, "status");
+  assert.equal(offline.online, false);
+  assert.equal(typeof offline.lastSeen, "number");
 
   client.close();
   server.close();

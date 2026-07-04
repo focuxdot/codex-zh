@@ -40,14 +40,38 @@ export class RolloutTail {
     this.#onError = onError;
   }
 
-  // 回填尾部最多 SNAPSHOT_MAX_ITEMS 条，然后开始监听增量
+  // 回填尾部最多 SNAPSHOT_MAX_ITEMS 条，然后开始监听增量。
+  // snapshot 附带 total（rollout 总条数），手机端据此判断"上面还有没有更早的"。
   async start() {
     const all = await this.#readFrom(0);
-    this.#onItems(all.slice(-SNAPSHOT_MAX_ITEMS), { snapshot: true });
+    this.#onItems(all.slice(-SNAPSHOT_MAX_ITEMS), { snapshot: true, total: all.length });
     this.#watcher = watch(this.#path, () => this.#scheduleRead());
     // Windows 下 fs.watch 对被占用文件可能丢事件，用低频轮询兜底
     this.#poller = setInterval(() => this.#scheduleRead(), 1500);
     this.#poller.unref?.();
+  }
+
+  // 手机端「下拉加载更早」：按更大的 limit 重发一次尾部快照。
+  // 用非破坏性全量读，不动增量 offset，实时 tail 不受影响。
+  async resnapshot(limit) {
+    const all = await this.#readAllPure();
+    const n = Math.max(1, Math.min(all.length, limit | 0));
+    this.#onItems(all.slice(-n), { snapshot: true, total: all.length });
+  }
+
+  // 从头读整份文件并解析，不改动 #offset/#pendingText（仅供快照重发用）
+  async #readAllPure() {
+    const handle = await open(this.#path, "r");
+    try {
+      const info = await handle.stat();
+      if (info.size === 0) return [];
+      const buffer = Buffer.alloc(info.size);
+      await handle.read(buffer, 0, info.size, 0);
+      const { items } = parseJsonlChunk(buffer.toString("utf8"));
+      return items;
+    } finally {
+      await handle.close();
+    }
   }
 
   #poller = null;

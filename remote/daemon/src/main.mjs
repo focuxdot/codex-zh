@@ -15,6 +15,7 @@ import {
   saveConfig,
 } from "./config.mjs";
 import { privateKeyFromPem } from "./crypto.mjs";
+import { writeDesktopRefreshSignal } from "./desktop-signal.mjs";
 import { Notifier, redact } from "./notify.mjs";
 import { PowerManager } from "./power.mjs";
 import { RelayLink } from "./relay-link.mjs";
@@ -70,17 +71,28 @@ export async function startDaemon({ configPath, overrides = {} }) {
       want ? power.acquire() : power.release();
     },
     async onEvent(type, { sessionId, clientsOnline }) {
-      if (notifier.count === 0) return;
       const name = await sessionName(sessionId);
+      if (type === "turnCompleted") {
+        // 通知打了补丁的桌面 Codex：这个会话被手机远程改写了，弹「刷新」横幅。
+        // 独立于 webhook 通知（哪怕没配 notifier 也要发），且只在手机驱动的回合触发。
+        writeDesktopRefreshSignal({ threadId: sessionId, name });
+      }
+      if (notifier.count === 0) return;
+      // 深链：点通知直达该会话（只含页面地址 + 会话 id，不含内容）
+      const link = config.webUrl
+        ? `${config.webUrl.replace(/\/+$/, "/")}#s=${encodeURIComponent(sessionId)}`
+        : undefined;
       if (type === "approval") {
         // 审批总是推（头号阻塞）
-        await notifier.send("Codex 需要审批", `会话「${name}」有操作待你批准，请打开 Codex 远程处理`);
+        await notifier.send("Codex 需要审批", `会话「${name}」有操作待你批准，请打开 Codex 远程处理`, link);
       } else if (type === "turnCompleted" && clientsOnline === 0) {
         // 任务完成仅在无设备在线时推，避免用户正在看时打扰
-        await notifier.send("Codex 任务完成", `会话「${name}」已完成`);
+        await notifier.send("Codex 任务完成", `会话「${name}」已完成`, link);
       }
     },
   });
+  // 引擎状态变化（崩溃自动重拉期间）推给手机端，供分层连接诊断
+  appServer.onStateChange = (healthy) => hub.broadcastEngineState(healthy);
   const daemonContext = {
     config,
     configPath,

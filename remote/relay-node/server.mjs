@@ -20,7 +20,7 @@ export function createRelayServer({ log = () => {} } = {}) {
   function room(daemonId) {
     let r = rooms.get(daemonId);
     if (!r) {
-      r = { daemon: null, clients: new Map(), nextCid: 1 };
+      r = { daemon: null, clients: new Map(), nextCid: 1, lastSeen: null };
       rooms.set(daemonId, r);
     }
     return r;
@@ -74,9 +74,10 @@ export function createRelayServer({ log = () => {} } = {}) {
       conn.onClose = () => {
         if (r.daemon === conn) {
           r.daemon = null;
+          r.lastSeen = Date.now();
           log(`daemon 下线: ${target.daemonId}`);
           for (const client of r.clients.values()) {
-            client.send(JSON.stringify({ t: "status", online: false }));
+            client.send(JSON.stringify({ t: "status", online: false, lastSeen: r.lastSeen }));
           }
           cleanup(target.daemonId);
         }
@@ -87,11 +88,16 @@ export function createRelayServer({ log = () => {} } = {}) {
     // client
     const cid = `c${r.nextCid++}`;
     r.clients.set(cid, conn);
-    conn.send(JSON.stringify({ t: "status", online: Boolean(r.daemon) }));
+    conn.send(JSON.stringify({ t: "status", online: Boolean(r.daemon), lastSeen: r.lastSeen }));
     r.daemon?.send(JSON.stringify({ t: "open", cid }));
     conn.onText = (text) => {
       const frame = safeParse(text);
-      if (frame?.t === "msg") {
+      if (!frame) return;
+      if (frame.t === "hb") {
+        conn.send(JSON.stringify({ t: "hb" })); // 手机端前台活性探测（与 Worker 形态行为一致）
+        return;
+      }
+      if (frame.t === "msg") {
         r.daemon?.send(JSON.stringify({ t: "msg", cid, data: frame.data }));
       }
     };

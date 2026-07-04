@@ -14,6 +14,12 @@ export class AppServer {
 
   onNotification = () => {}; // (method, params)
   onServerRequest = () => {}; // (id, method, params) —— 审批等，需调用 respond(id, result)
+  onStateChange = () => {}; // (healthy: bool) —— 引擎掉线/恢复时回调（远端诊断用）
+
+  // 引擎当前是否可用（app-server 进程活着且 WS 已连上）
+  get healthy() {
+    return this.#ws !== null;
+  }
 
   constructor({ command = "codex", port = 19271, log = () => {} } = {}) {
     this.#command = command;
@@ -38,6 +44,7 @@ export class AppServer {
     this.#child.on("exit", (code) => {
       this.#log(`app-server 退出（code=${code}）`);
       this.#ws = null;
+      this.onStateChange(false);
       if (!this.#closed) {
         // 自动重拉，避免引擎崩溃导致远程永久不可用
         delay(2000).then(() => this.#spawnAndConnect().catch((err) => this.#log(String(err))));
@@ -70,19 +77,24 @@ export class AppServer {
     });
     ws.onmessage = (event) => this.#onMessage(event.data);
     ws.onclose = () => {
+      const wasHealthy = this.#ws !== null;
       this.#ws = null;
       for (const [, pending] of this.#pending) {
         pending.reject(new Error("app-server 连接断开"));
       }
       this.#pending.clear();
+      if (wasHealthy) this.onStateChange(false);
     };
     this.#ws = ws;
     await this.request("initialize", {
       clientInfo: { name: "codex-zh-remote-daemon", version: "0.1.0" },
+      // 计划模式（collaborationMode）、thread/goal 等在 experimental 能力门之后
+      capabilities: { experimentalApi: true },
     });
     // 握手收尾：app-server 需收到 initialized 通知后才服务会话级方法
     // （thread/resume、thread/start、turn/start）；缺此步这些请求会挂起超时。
     this.notify("initialized", {});
+    this.onStateChange(true);
   }
 
   notify(method, params = {}) {
@@ -154,6 +166,8 @@ export class AppServer {
   async listThreads(limit = 50) {
     const result = await this.request("thread/list", { limit });
     const items = result?.data ?? [];
+    // 引擎返回的顺序不保证按最后更新排，这里统一成新→旧再给客户端
+    items.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
     return items.map((t) => ({
       id: t.id,
       preview: t.preview ?? "",
@@ -175,11 +189,13 @@ export class AppServer {
     return this.request("thread/resume", { threadId, ...overrides }, this.#SESSION_TIMEOUT);
   }
 
-  // 发起一轮对话，返回 { turnId? }
-  startTurn(threadId, text, overrides = {}) {
+  // 发起一轮对话（input 为字符串，或 turn/start 输入项数组——文本+图片混合时用后者），
+  // 返回 { turnId? }
+  startTurn(threadId, input, overrides = {}) {
+    const items = typeof input === "string" ? [{ type: "text", text: input }] : input;
     return this.request(
       "turn/start",
-      { threadId, input: [{ type: "text", text }], ...overrides },
+      { threadId, input: items, ...overrides },
       this.#SESSION_TIMEOUT,
     );
   }
