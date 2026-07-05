@@ -262,7 +262,7 @@ final class MenuController: NSObject, NSMenuDelegate {
         hint.font = .systemFont(ofSize: 13)
 
         // 一次性链接：临时发出去用，5 分钟内有效、仅一次
-        let onceBtn = NSButton(title: "复制一次性链接（5 分钟）", target: self, action: #selector(copyOnceLink(_:)))
+        let onceBtn = NSButton(title: "复制邀请链接（一次性 · 5 分钟）", target: self, action: #selector(copyOnceLink(_:)))
         onceBtn.bezelStyle = .rounded
         onceBtn.font = .systemFont(ofSize: 14)
 
@@ -285,7 +285,7 @@ final class MenuController: NSObject, NSMenuDelegate {
         let res = backend(["pair-once"])
         guard let url = res["url"] as? String else { alert("生成失败", "\(res["error"] ?? "未知错误")"); return }
         copyToPasteboard(url)
-        flashCopied(sender, restore: "复制一次性链接（5 分钟）")
+        flashCopied(sender, restore: "复制邀请链接（一次性 · 5 分钟）")
     }
 
     // 复制后短暂把按钮标题变为「已复制 ✓」再复原
