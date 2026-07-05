@@ -18,6 +18,7 @@ import {
   pairOnce,
   listDevices,
   revokeDevice,
+  pruneUnusedDevices,
   notifyAdd,
   notifyList,
   notifyRemove,
@@ -160,6 +161,29 @@ test("devices 列表与 revoke", () => {
     assert.equal(revokeDevice(h.deps, "d1").ok, true);
     assert.equal(listDevices(h.deps).devices.length, 1);
     assert.equal(revokeDevice(h.deps, "nope").ok, false);
+  } finally {
+    h.cleanup();
+  }
+});
+
+test("prune-unused 只删从未连接（lastSeenAt 空）的设备", () => {
+  const h = harness();
+  try {
+    const config = loadOrCreateConfig(h.deps.configPath);
+    config.devices = [
+      { deviceId: "used", tokenHash: "a", createdAt: 1, lastSeenAt: 2 },      // 连过 → 保留
+      { deviceId: "orphan1", tokenHash: "b", createdAt: 3, lastSeenAt: null }, // 从未连 → 删
+      { deviceId: "orphan2", tokenHash: "c", createdAt: 4 },                   // 无 lastSeenAt → 删
+    ];
+    saveConfig(h.deps.configPath, config);
+    const res = pruneUnusedDevices(h.deps);
+    assert.equal(res.ok, true);
+    assert.equal(res.removed, 2);
+    const left = listDevices(h.deps).devices;
+    assert.equal(left.length, 1);
+    assert.equal(left[0].deviceId, "used");
+    // 再次清理无可删 → removed 0
+    assert.equal(pruneUnusedDevices(h.deps).removed, 0);
   } finally {
     h.cleanup();
   }

@@ -350,7 +350,22 @@ final class MenuController: NSObject, NSMenuDelegate {
             row.addArrangedSubview(btn)
             stack.addArrangedSubview(row)
         }
-        makeWindow("已配对设备", stack, width: 360, height: max(140, CGFloat(60 + devices.count * 50)))
+
+        // "从未连接"的条目 = 生成过但没人扫过的链接（lastSeenAt 空）。给一键清理，
+        // 作废这些悬空令牌——曾外泄/转发但没被使用的链接随即失效。
+        let unused = devices.filter { (($0["lastSeenAt"] as? NSNumber)?.doubleValue ?? 0) <= 0 }.count
+        var extra = 0
+        if unused > 0 {
+            let tip = NSTextField(labelWithString: "有 \(unused) 条从未连接的链接（生成过但没被扫过）")
+            tip.font = .systemFont(ofSize: 11)
+            tip.textColor = .secondaryLabelColor
+            let prune = NSButton(title: "清理从未连接的链接（\(unused)）", target: self, action: #selector(pruneUnusedTapped))
+            prune.bezelStyle = .rounded
+            stack.addArrangedSubview(tip)
+            stack.addArrangedSubview(prune)
+            extra = 56
+        }
+        makeWindow("已配对设备", stack, width: 380, height: max(140, CGFloat(60 + devices.count * 50 + extra)))
     }
 
     @objc func revokeTapped(_ sender: NSButton) {
@@ -358,6 +373,21 @@ final class MenuController: NSObject, NSMenuDelegate {
         backend(["revoke", id])
         sender.superview?.superview?.window?.close()
         showDevices(backend(["devices"])["devices"] as? [[String: Any]] ?? [])
+    }
+
+    @objc func pruneUnusedTapped() {
+        let a = NSAlert()
+        a.messageText = "清理从未连接的链接"
+        a.informativeText = "将移除所有“生成过但从未连接”的链接，作废这些悬空凭据——曾外泄或转发出去、但没被使用的链接会随即失效。不影响任何已连接过的设备。"
+        a.addButton(withTitle: "清理")
+        a.addButton(withTitle: "取消")
+        NSApp.activate(ignoringOtherApps: true)
+        guard a.runModal() == .alertFirstButtonReturn else { return }
+        let res = backend(["prune-unused"])
+        let removed = res["removed"] as? Int ?? 0
+        for w in windows where w.title == "已配对设备" { w.close() }
+        showDevices(backend(["devices"])["devices"] as? [[String: Any]] ?? [])
+        alert("已清理", "已作废 \(removed) 条从未使用的链接。")
     }
 
     func showNotify() {

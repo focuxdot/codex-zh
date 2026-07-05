@@ -11,6 +11,7 @@
 //   pair-once                    -> { url } —— 签发一次性配对令牌（5 分钟），返回 #p= URL
 //   devices                      -> { devices:[{deviceId,name,createdAt,lastSeenAt}] }
 //   revoke   <deviceId>          -> { ok }
+//   prune-unused                 -> { ok, removed } —— 删除所有从未连接的设备（作废悬空/外泄链接）
 //   notify-list                  -> { notifiers:[{index,label}] }
 //   notify-add  <inputFile>      -> { ok } （输入 {type,key?|url?,server?}，走临时文件）
 //   notify-remove <index>        -> { ok }
@@ -205,6 +206,18 @@ export function revokeDevice(deps, deviceId) {
   return { ok: config.devices.length < before };
 }
 
+// 清理"从未连接"的设备（lastSeenAt 空）——即生成过但没人扫过的链接。移除它们等于
+// 作废这些悬空令牌：以前若有外泄/转发但没被使用的链接会随即失效（撤销即时生效，
+// 因 daemon 每次鉴权重读配置）。不影响任何已连过的设备。
+export function pruneUnusedDevices(deps) {
+  const config = loadOrCreateConfig(deps.configPath);
+  const before = (config.devices ?? []).length;
+  config.devices = (config.devices ?? []).filter((d) => d.lastSeenAt);
+  const removed = before - config.devices.length;
+  saveConfig(deps.configPath, config);
+  return { ok: true, removed };
+}
+
 export function notifyList(deps) {
   const config = existsSync(deps.configPath) ? loadOrCreateConfig(deps.configPath) : { notifiers: [] };
   return { notifiers: (config.notifiers ?? []).map((n, index) => ({ index, label: redact(n) })) };
@@ -244,6 +257,7 @@ export async function run(command, rest, deps = makeDeps()) {
     case "pair-once": return pairOnce(deps);
     case "devices": return listDevices(deps);
     case "revoke": return revokeDevice(deps, rest[0]);
+    case "prune-unused": return pruneUnusedDevices(deps);
     case "notify-list": return notifyList(deps);
     case "notify-add": return notifyAdd(deps, JSON.parse(readFileSync(rest[0], "utf8")));
     case "notify-remove": return notifyRemove(deps, Number(rest[0]));
