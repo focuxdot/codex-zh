@@ -100,7 +100,7 @@ try {
               white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #chev { display: none; color: var(--dim); font-size: 12px; margin-left: 5px; }
   #chev.show { display: inline; }
-  /* 返回：无背景的图标按钮，尺寸与右侧「新建会话」（#newsess）呼应 */
+  /* 返回：无背景的图标按钮，尺寸与右侧图标按钮呼应 */
   #back { flex: none; width: 36px; height: 36px; margin-left: -6px; border: none;
           background: none; color: var(--text); cursor: pointer; padding: 0;
           align-items: center; justify-content: center; }
@@ -121,13 +121,6 @@ try {
              cursor: pointer; padding: 0; }
   #menubtn:active { background: var(--border); }
   body.insession #menubtn, body:not(.paired) #menubtn { display: none; }
-  /* 会话视图右上角：在当前会话同目录新建会话（与 #menubtn 互斥占位）*/
-  #newsess { flex: none; width: 36px; height: 36px; border: none; border-radius: 50%;
-             background: none; color: var(--text); cursor: pointer; padding: 0;
-             display: none; align-items: center; justify-content: center; }
-  #newsess:active { color: var(--dim); }
-  #newsess svg { width: 21px; height: 21px; }
-  body.insession #newsess { display: flex; }
   /* ⋯ 菜单：组织方式 + 管理 */
   #topmenu { display: none; position: fixed; right: 10px; top: 58px; z-index: 45;
              background: var(--raised); border: 1px solid var(--border); border-radius: 16px;
@@ -466,7 +459,7 @@ try {
   /* —— 围观（只读观众态）——
      观众页 = 创作者页 − 一切触及会话的操作 + 一条身份栏：阅读本体（渲染管线）零改动，
      这里只按 body.viewer 收掉操作性镶边。daemon 端过滤是第一道防线，此处仅第二道保险。 */
-  body.viewer #back, body.viewer #newsess, body.viewer #sharebtn, body.viewer #homebar,
+  body.viewer #back, body.viewer #sharebtn, body.viewer #homebar,
   body.viewer #chev, body.viewer #approvals, body.viewer #jump { display: none !important; }
   body.viewer #card { display: none; }
   /* 观众保留 ⋯ 菜单（外观/字体/连接状态），收掉组织方式与切换电脑等全权入口 */
@@ -512,16 +505,13 @@ try {
   #replaymore.show { display: block; }
 
   /* —— 分享围观（创作者侧）—— */
-  /* 会话页顶栏分享入口（与 #newsess 同款裸图标按钮） */
+  /* 会话页顶栏分享入口（裸图标按钮） */
   #sharebtn { flex: none; width: 36px; height: 36px; border: none; border-radius: 50%;
               background: none; color: var(--text); cursor: pointer; padding: 0;
               display: none; align-items: center; justify-content: center; }
   #sharebtn:active { color: var(--dim); }
   #sharebtn svg { width: 20px; height: 20px; }
   body.insession #sharebtn { display: flex; }
-  .sharewarn { font-size: 12.5px; color: var(--warn); background: var(--warn-bg);
-               border: 1px solid var(--warn-border); border-radius: 8px; padding: 8px 12px;
-               margin-bottom: 10px; line-height: 1.6; }
   .sharerow { display: flex; align-items: center; gap: 10px; padding: 12px 10px; border-radius: 10px; }
   .sharerow .smain { flex: 1; min-width: 0; }
   .sharerow .sname { font-size: 14px; }
@@ -544,7 +534,6 @@ try {
     <span id="status">连接中…</span>
   </div>
   <button id="sharebtn" aria-label="分享围观（只读）"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg></button>
-  <button id="newsess" aria-label="在当前目录新建会话"></button>
   <button id="menubtn" aria-label="更多选项">⋯</button>
 </header>
 <div id="topmenu">
@@ -3622,8 +3611,7 @@ function startSession(info) {
 
 // —— 分享围观（创作者侧）——
 // 决策：先展示该会话已存在的链接（时效/在线观众/复制/撤销），"再生成一条"是显式动作，
-// 打开弹窗绝不铸造令牌。丑话前置：只读 ≠ 无害，脱敏责任在分享者。
-const SHARE_WARN = "围观者可以看到本会话的全部内容——代码、命令与输出。";
+// 打开弹窗绝不铸造令牌。
 
 function fmtExpiry(expiresAt) {
   if (!expiresAt) return "永久";
@@ -3655,10 +3643,6 @@ async function openShareSheet() {
 function renderShareSheet(links, freshUrl) {
   const box = $("sharelist");
   box.innerHTML = "";
-  const warn = document.createElement("div");
-  warn.className = "sharewarn";
-  warn.textContent = SHARE_WARN;
-  box.appendChild(warn);
 
   for (const link of links) {
     const row = document.createElement("div");
@@ -3940,16 +3924,6 @@ async function main() {
     updateThemeChecks();
     updateFontChecks();
     $("topmenu").classList.toggle("open");
-  };
-  // 会话视图右上角「新建会话」：复用首页项目头的同款 COMPOSE 图标，在当前会话同目录直接开新会话
-  $("newsess").innerHTML = COMPOSE_SVG;
-  $("newsess").onclick = async () => {
-    if (net.link !== "ok" || net.daemon === false) { showBanner("电脑离线，暂时无法新建会话"); return; }
-    const cur = app.lastSessions.find((x) => x.id === app.currentId);
-    const cwd = cur?.cwd || undefined; // 当前会话工作目录；取不到则用电脑端默认目录
-    if (app.currentId) app.drafts.set(app.currentId, $("input").value); // 保住当前草稿
-    await app.session.request("session.unwatch").catch(() => {}); // 停掉当前会话的 watch
-    createSession(cwd);
   };
   $("topmenu").onclick = (e) => {
     const act = e.target.closest("button")?.dataset.act;
