@@ -47,12 +47,13 @@ export function resolveAppRoot(env = process.env, moduleUrl = import.meta.url) {
 }
 
 export function bundlePaths(appRoot) {
-  const contents = path.join(appRoot, "Contents");
+  // bundle 内路径按定义是 mac 路径，用 posix join 保证跨平台（如 Windows CI 跑单测）输出一致
+  const contents = path.posix.join(appRoot, "Contents");
   return {
-    node: path.join(contents, "Resources", "cua_node", "bin", "node"),
-    codexCli: path.join(contents, "Resources", "codex"),
-    daemonMain: path.join(contents, "Resources", "codex-zh", "remote", "daemon", "src", "main.mjs"),
-    menuBin: path.join(contents, "Resources", "codex-zh", "bin", "CodexZhRemoteMenu"),
+    node: path.posix.join(contents, "Resources", "cua_node", "bin", "node"),
+    codexCli: path.posix.join(contents, "Resources", "codex"),
+    daemonMain: path.posix.join(contents, "Resources", "codex-zh", "remote", "daemon", "src", "main.mjs"),
+    menuBin: path.posix.join(contents, "Resources", "codex-zh", "bin", "CodexZhRemoteMenu"),
   };
 }
 
