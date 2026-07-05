@@ -586,7 +586,7 @@ try {
 </div>
 <div id="sharesheet" class="sheet">
   <div class="sheetbox">
-    <div class="sheethead">分享围观（只读）</div>
+    <div class="sheethead">分享围观</div>
     <div id="sharelist"></div>
   </div>
 </div>
@@ -3651,11 +3651,15 @@ function renderShareSheet(links, freshUrl) {
     main.className = "smain";
     const name = document.createElement("div");
     name.className = "sname";
-    name.textContent = `围观链接（只读 · ${fmtExpiry(link.expiresAt)}）`;
-    const sub = document.createElement("div");
-    sub.className = "ssub";
-    sub.textContent = link.viewers > 0 ? `${link.viewers} 人正在围观` : "暂无人围观";
-    main.append(name, sub);
+    name.textContent = `围观链接（${fmtExpiry(link.expiresAt)}）`;
+    main.appendChild(name);
+    // 有人围观才显示计数；没人时不留任何文案（也不留空行）
+    if (link.viewers > 0) {
+      const sub = document.createElement("div");
+      sub.className = "ssub";
+      sub.textContent = `${link.viewers} 人正在围观`;
+      main.appendChild(sub);
+    }
     row.appendChild(main);
     if (link.url) {
       const copy = document.createElement("button");
@@ -3756,7 +3760,7 @@ function renderShareSheet(links, freshUrl) {
     }
     const tip = document.createElement("div");
     tip.className = "sheetnote";
-    tip.textContent = "任何拿到链接的人点开即可围观（只读）。可随时在此撤销。";
+    tip.textContent = "任何拿到链接的人点开即可围观。可随时在此撤销。";
     box.appendChild(tip);
   }
 }
