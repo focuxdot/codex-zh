@@ -228,7 +228,9 @@ jobs:
 
       - name: Create release for tag push
         if: github.event_name == 'push'
-        shell: powershell
+        # pwsh (7) 默认按 UTF-8 读取 run 脚本；Windows PowerShell 5.1 按系统 ANSI
+        # 代码页读取，会把标题里的中文（如 Codex-叉叉）读成乱码后发给 gh。
+        shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
