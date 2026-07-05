@@ -1249,7 +1249,7 @@ function itemToBubble(item) {
     }
     if (pt === "web_search_end") {
       const q = String(p.query ?? "").trim();
-      return q ? { cls: "tool", icon: "⌕", label: `搜索：${q}`, detail: q, callId: null } : null;
+      return q ? { cls: "tool", icon: "⌕", label: q, detail: q, callId: null } : null; // 图标已表意，不再加「搜索：」前缀
     }
     // 旧格式兼容：现行版本命令在 response_item 里，见到过 function_call 就跳过这两类避免重复
     if (pt === "exec_command_begin" && !app.sawFunctionCalls) {
