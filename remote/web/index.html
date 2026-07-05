@@ -86,7 +86,7 @@ try {
   * { box-sizing: border-box; }
   /* 禁掉浏览器原生下拉刷新：会话/首页滚到顶再拉不会 reload（reload 会把 SPA 弹回首页） */
   html { overscroll-behavior-y: contain; }
-  body { margin: 0; font: 16px/1.7 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+  body { margin: 0; font: 17px/1.7 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
          background: var(--bg); color: var(--text); overscroll-behavior-y: contain; }
   body.insession main { padding-bottom: 145px; }
   button { font: inherit; }
@@ -190,10 +190,10 @@ try {
   .obdim { font-size: 12.5px; }
 
   /* —— 列表页：状态看板 —— */
-  #headline { font-size: 20px; font-weight: 700; line-height: 1.4; margin: 6px 2px 16px; }
+  #headline { font-size: 21px; font-weight: 700; line-height: 1.4; margin: 6px 2px 16px; }
   #headline.warn { color: var(--warn); }
-  #headline .sub { display: block; font-size: 13px; font-weight: 400; color: var(--dim); margin-top: 2px; }
-  .secthead { font-size: 12px; color: var(--dim); margin: 18px 2px 8px; letter-spacing: 1px; }
+  #headline .sub { display: block; font-size: 14px; font-weight: 400; color: var(--dim); margin-top: 2px; }
+  .secthead { font-size: 12.5px; color: var(--dim); margin: 18px 2px 8px; letter-spacing: 1px; }
   .row { display: flex; align-items: center; gap: 12px; padding: 13px 14px; margin-bottom: 8px;
          background: var(--raised); border: 1px solid var(--border); border-radius: 12px; cursor: pointer; }
   .row:active { background: var(--sunken); }
@@ -204,9 +204,9 @@ try {
   @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .25; } }
   .rowmain { flex: 1; min-width: 0; }
   .rowtitle { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .rowsnip { font-size: 13px; color: var(--dim); margin-top: 2px;
+  .rowsnip { font-size: 14px; color: var(--dim); margin-top: 2px;
              white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .rowsub { font-size: 12px; color: var(--dim); margin-top: 2px;
+  .rowsub { font-size: 13px; color: var(--dim); margin-top: 2px;
             white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .rowsub .st { font-weight: 600; }
   .rowsub .st.run { color: var(--ok); }
@@ -215,7 +215,7 @@ try {
   .proj { display: flex; align-items: center; gap: 10px; padding: 12px 4px; cursor: pointer;
           user-select: none; }
   .proj svg { flex: none; color: var(--text); }
-  .pname { min-width: 0; font-size: 17px; font-weight: 700;
+  .pname { min-width: 0; font-size: 18px; font-weight: 700;
            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .pchev { flex: none; color: var(--dim); font-size: 11px; }
   .pnew { margin-left: auto; flex: none; border: none; background: none; color: var(--text);
@@ -250,7 +250,7 @@ try {
   /* 中文粗体 700 在深底上过于晃眼，600 半粗足够醒目（对标 ChatGPT） */
   .md strong { font-weight: 600; }
   .md h3, .md h4, .md h5, .md h6 { margin: 14px 0 6px; line-height: 1.4; font-weight: 600; }
-  .md h3 { font-size: 18px; } .md h4 { font-size: 17px; } .md h5, .md h6 { font-size: 16px; }
+  .md h3 { font-size: 19px; } .md h4 { font-size: 18px; } .md h5, .md h6 { font-size: 17px; }
   .md ul, .md ol { margin: 10px 0; padding-left: 22px; }
   .md li { margin: 3px 0; }
   /* 行内代码：无边框的灰色等宽（小方框会把中文句子切碎），字号随正文缩放 */
@@ -258,14 +258,14 @@ try {
              background: var(--sunken); border-radius: 5px; padding: 1px 4px; overflow-wrap: anywhere; }
   .md pre { background: var(--sunken); border: 1px solid var(--border); border-radius: 8px;
             padding: 10px 12px; overflow-x: auto; margin: 10px 0; }
-  .md pre code { background: none; border: none; padding: 0; font-size: 13px; line-height: 1.55;
+  .md pre code { background: none; border: none; padding: 0; font-size: 13.5px; line-height: 1.55;
                  color: var(--text); white-space: pre; word-break: normal; }
   .md blockquote { margin: 8px 0; padding: 2px 12px; border-left: 3px solid var(--border); color: var(--dim); }
   .md a { color: var(--accent); }
   .md hr { border: none; border-top: 1px solid var(--border); margin: 14px 0; }
   .morelink { display: block; background: none; border: none; color: var(--accent);
-              font-size: 13px; padding: 6px 0; cursor: pointer; }
-  .md table { border-collapse: collapse; margin: 10px 0; font-size: 13px;
+              font-size: 14px; padding: 6px 0; cursor: pointer; }
+  .md table { border-collapse: collapse; margin: 10px 0; font-size: 14px;
               display: block; overflow-x: auto; max-width: 100%; }
   .md th, .md td { border: 1px solid var(--border); padding: 4px 9px; text-align: left; }
   .md th { background: var(--sunken); }
@@ -287,7 +287,7 @@ try {
   #search:focus { outline: none; border-color: var(--accent); }
   #newchat { flex: none; display: flex; align-items: center; gap: 7px; border: none;
              border-radius: 24px; padding: 0 18px; background: var(--text); color: var(--bg);
-             font-size: 15px; font-weight: 600; cursor: pointer; }
+             font-size: 16px; font-weight: 600; cursor: pointer; }
   #newchat:active { opacity: .8; }
   body.paired:not(.insession) main { padding-bottom: 96px; }
 
@@ -295,7 +295,7 @@ try {
   .tool { border: 1px solid var(--border); background: var(--raised); border-radius: 10px;
           margin: 10px 0; overflow: hidden; }
   .tool-head { display: flex; align-items: center; gap: 8px; padding: 8px 12px;
-               font: 12.5px/1.5 ui-monospace, monospace; color: var(--dim); cursor: pointer; }
+               font: 13.5px/1.5 ui-monospace, monospace; color: var(--dim); cursor: pointer; }
   .tool-head .tchev { flex: none; font-size: 10px; transition: transform .15s; }
   .tool.open .tchev { transform: rotate(90deg); }
   .tool-head .tcmd { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -303,7 +303,7 @@ try {
   .tool-head .tstat.ok { color: var(--ok); }
   .tool-head .tstat.err { color: var(--err); }
   .tool-body { display: none; border-top: 1px solid var(--border); padding: 10px 12px;
-               font: 12.5px/1.5 ui-monospace, monospace; white-space: pre-wrap; word-break: break-all;
+               font: 13px/1.5 ui-monospace, monospace; white-space: pre-wrap; word-break: break-all;
                max-height: 50vh; overflow-y: auto; background: var(--sunken); }
   .tool.open .tool-body { display: block; }
   .tool-body .tout { display: none; border-top: 1px dashed var(--border);
@@ -312,7 +312,7 @@ try {
      运行中摊开实时看，出最终回复后自动收拢成一行摘要（类似 ChatGPT 的 Worked for…） */
   .proc { margin: 10px 0; }
   .proc-head { display: flex; align-items: center; gap: 8px; padding: 6px 2px;
-               font-size: 13px; color: var(--dim); cursor: pointer; user-select: none;
+               font-size: 14px; color: var(--dim); cursor: pointer; user-select: none;
                -webkit-tap-highlight-color: transparent; }
   .proc-head .pchev { flex: none; font-size: 10px; transition: transform .15s; }
   .proc.open .pchev { transform: rotate(90deg); }
@@ -356,20 +356,20 @@ try {
   .trunc { text-align: center; color: var(--dim); font-size: 12px; margin: 12px 0; }
   .approval { background: var(--warn-bg); border: 1px solid var(--warn-border); border-radius: 12px;
               padding: 12px 14px; margin: 10px 0; box-shadow: 0 4px 16px rgba(0,0,0,.25); }
-  .approval .atitle { color: var(--warn); font-weight: 600; margin-bottom: 6px; font-size: 14px; }
-  .approval .acmd { font-family: ui-monospace, monospace; font-size: 13px; background: var(--sunken);
+  .approval .atitle { color: var(--warn); font-weight: 600; margin-bottom: 6px; font-size: 15px; }
+  .approval .acmd { font-family: ui-monospace, monospace; font-size: 14px; background: var(--sunken);
                     border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px;
                     white-space: pre-wrap; word-break: break-all; max-height: 40vh; overflow-y: auto; }
   .approval .acmd.danger { border-color: var(--err); }
-  .approval .acwd { font-size: 12px; color: var(--dim); margin-top: 6px;
+  .approval .acwd { font-size: 13px; color: var(--dim); margin-top: 6px;
                     font-family: ui-monospace, monospace; word-break: break-all; }
-  .approval .adanger { font-size: 12px; color: var(--err); margin-top: 6px; }
+  .approval .adanger { font-size: 13px; color: var(--err); margin-top: 6px; }
   .approval .abtns { display: flex; gap: 10px; margin-top: 10px; }
   .approval .abtns button { flex: 1; border: none; border-radius: 8px; padding: 10px; cursor: pointer; }
   .approval .ayes { background: var(--ok); color: #fff; }
   .approval .ano { background: none; border: 1px solid var(--border); color: var(--text); }
   .approval .aall { display: block; width: 100%; background: none; border: none; color: var(--ok);
-                    font-size: 13px; margin-top: 4px; padding: 8px; cursor: pointer; }
+                    font-size: 14px; margin-top: 4px; padding: 8px; cursor: pointer; }
 
   /* 底部输入区：一体化卡片（输入行在上，操作排在下） */
   #composer { display: none; position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
@@ -377,7 +377,7 @@ try {
               padding: 6px 10px calc(10px + env(safe-area-inset-bottom)); }
   #composer.active { display: block; }
   .chip { flex: none; border: 1px solid var(--border); background: var(--raised); color: var(--text);
-          border-radius: 15px; padding: 5px 13px; font-size: 13px; cursor: pointer; }
+          border-radius: 15px; padding: 5px 13px; font-size: 14px; cursor: pointer; }
   .chip:active { background: var(--border); }
   #card { background: var(--raised); border: 1px solid var(--border); border-radius: 22px;
           padding: 10px 10px 8px 14px; max-width: 760px; margin: 0 auto;
@@ -392,7 +392,7 @@ try {
                 border-radius: 50%; border: none; background: var(--text); color: var(--bg);
                 font-size: 11px; line-height: 20px; padding: 0; cursor: pointer; }
   #input { display: block; width: 100%; resize: none; background: none; color: var(--text);
-           border: none; padding: 2px 4px 8px 0; font: inherit; font-size: 16px;
+           border: none; padding: 2px 4px 8px 0; font: inherit; font-size: 17px;
            line-height: 1.4; min-height: 33px; scrollbar-width: none; }
            /* 16px 起步：iOS 对更小的输入框字号会聚焦自动放大页面 */
   #input::-webkit-scrollbar { display: none; }
@@ -451,33 +451,33 @@ try {
 
   /* 字体两档：默认「常规」即上面的既有字号；data-font="large" 把阅读面（正文/列表/输入/审批）
      整体调大约一号，界面骨架（图标、按钮、间距）不动。上面新增显式 font-size 的阅读元素时记得同步。 */
-  :root[data-font="large"] body { font-size: 17px; }
-  :root[data-font="large"] header h1 { font-size: 17px; }
+  :root[data-font="large"] body { font-size: 19px; }
+  :root[data-font="large"] header h1 { font-size: 17.5px; }
   :root[data-font="large"] #status { font-size: 13px; }
-  :root[data-font="large"] #headline { font-size: 22px; }
-  :root[data-font="large"] #headline .sub { font-size: 14.5px; }
-  :root[data-font="large"] .secthead { font-size: 13px; }
-  :root[data-font="large"] .pname { font-size: 19px; }
-  :root[data-font="large"] .rowsnip { font-size: 14.5px; }
-  :root[data-font="large"] .rowsub { font-size: 13.5px; }
-  :root[data-font="large"] .md h3 { font-size: 19px; }
-  :root[data-font="large"] .md h4 { font-size: 18px; }
-  :root[data-font="large"] .md h5, :root[data-font="large"] .md h6 { font-size: 17px; }
-  :root[data-font="large"] .md pre code { font-size: 14px; }
-  :root[data-font="large"] .md table { font-size: 14.5px; }
-  :root[data-font="large"] .morelink { font-size: 14.5px; }
-  :root[data-font="large"] .tool-head { font-size: 14px; }
-  :root[data-font="large"] .proc-head { font-size: 14.5px; }
-  :root[data-font="large"] .approval .atitle { font-size: 15.5px; }
-  :root[data-font="large"] .approval .acmd { font-size: 14.5px; }
-  :root[data-font="large"] .approval .acwd, :root[data-font="large"] .approval .adanger { font-size: 13.5px; }
-  :root[data-font="large"] .approval .aall { font-size: 14.5px; }
-  :root[data-font="large"] #topmenu button, :root[data-font="large"] #plusmenu button { font-size: 16.5px; }
-  :root[data-font="large"] #input { font-size: 17.5px; }
-  :root[data-font="large"] #search { font-size: 17px; }
-  :root[data-font="large"] #newchat { font-size: 16.5px; }
-  :root[data-font="large"] #modelbtn { font-size: 16.5px; }
-  :root[data-font="large"] .chip { font-size: 14.5px; }
+  :root[data-font="large"] #headline { font-size: 24px; }
+  :root[data-font="large"] #headline .sub { font-size: 15.5px; }
+  :root[data-font="large"] .secthead { font-size: 14px; }
+  :root[data-font="large"] .pname { font-size: 20px; }
+  :root[data-font="large"] .rowsnip { font-size: 15.5px; }
+  :root[data-font="large"] .rowsub { font-size: 14.5px; }
+  :root[data-font="large"] .md h3 { font-size: 21px; }
+  :root[data-font="large"] .md h4 { font-size: 20px; }
+  :root[data-font="large"] .md h5, :root[data-font="large"] .md h6 { font-size: 19px; }
+  :root[data-font="large"] .md pre code { font-size: 15px; }
+  :root[data-font="large"] .md table { font-size: 15.5px; }
+  :root[data-font="large"] .morelink { font-size: 15.5px; }
+  :root[data-font="large"] .tool-head { font-size: 15px; }
+  :root[data-font="large"] .proc-head { font-size: 15.5px; }
+  :root[data-font="large"] .approval .atitle { font-size: 16.5px; }
+  :root[data-font="large"] .approval .acmd { font-size: 15.5px; }
+  :root[data-font="large"] .approval .acwd, :root[data-font="large"] .approval .adanger { font-size: 14.5px; }
+  :root[data-font="large"] .approval .aall { font-size: 15.5px; }
+  :root[data-font="large"] #topmenu button, :root[data-font="large"] #plusmenu button { font-size: 17.5px; }
+  :root[data-font="large"] #input { font-size: 19px; }
+  :root[data-font="large"] #search { font-size: 17.5px; }
+  :root[data-font="large"] #newchat { font-size: 17px; }
+  :root[data-font="large"] #modelbtn { font-size: 17px; }
+  :root[data-font="large"] .chip { font-size: 15.5px; }
 
   /* —— 围观（只读观众态）——
      观众页 = 创作者页 − 一切触及会话的操作 + 一条身份栏：阅读本体（渲染管线）零改动，
