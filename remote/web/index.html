@@ -3108,7 +3108,7 @@ function ensureProc(mount) {
   head.onclick = () => wrap.classList.toggle("open");
   wrap.append(head, body);
   mount.appendChild(wrap);
-  Object.assign(p, { wrap, body, label });
+  Object.assign(p, { wrap, body, label, at: Date.now() });
   return p;
 }
 
@@ -3129,8 +3129,11 @@ function procFinish(item, aborted = false) {
     : ms != null && ms >= 1000 ? `处理了 ${fmtDur(ms)}` : `执行了 ${steps} 步`;
   // 用户不在底部且过程区正在视口里（多半在回看输出）：不自动收，免得内容被抽走；
   // 头部摘要已就位，随时可手动收。批量回填（组还在 fragment 里）rect 全 0，恒收拢。
+  // 「在读」还要求组挂载已超过几秒：快照分块是毫秒级连发，跨块的历史轮次会在
+  // 视口/滚动条件上误判成在读（块间视口恰好停在组上），刚挂载的组一律照常收拢。
   const r = p.wrap.getBoundingClientRect();
-  const reading = !nearBottom() && r.bottom > 0 && r.top < window.innerHeight && r.height > 0;
+  const reading = Date.now() - p.at > 3000
+    && !nearBottom() && r.bottom > 0 && r.top < window.innerHeight && r.height > 0;
   if (!reading) p.wrap.classList.remove("open");
 }
 
