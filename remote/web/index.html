@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
 <title>Codex-叉叉</title>
 <link rel="manifest" href="manifest.webmanifest">
-<meta id="mtcdark" name="theme-color" media="(prefers-color-scheme: dark)" content="#171b22">
+<meta id="mtcdark" name="theme-color" media="(prefers-color-scheme: dark)" content="#14181f">
 <meta id="mtclight" name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff">
 <script>
 // 手动外观/字体在首帧前生效，避免打开瞬间闪一下系统色或字号跳变（正式逻辑在主模块 applyTheme/applyFontSize）
@@ -24,12 +24,13 @@ try {
 <style>
   :root {
     color-scheme: dark;
-    --bg: #0f1216;
-    --raised: #171b22;
-    --sunken: #0b0e12;
+    --bg: #0c0e11;
+    --raised: #14181f;
+    --sunken: #090b0e;
     --border: #272d37;
-    --text: #e9ecef;
+    --text: #e3e7eb;
     --dim: #8f99a5;
+    --code: #b9c2cc;
     --accent: #4d8fd6;
     --accent-bg: #19273a;
     --user-bubble: #21384f;
@@ -51,6 +52,7 @@ try {
       --border: #e1e5ea;
       --text: #1d232b;
       --dim: #6d7784;
+      --code: #4a5561;
       --accent: #2f6fb0;
       --accent-bg: #e7effa;
       --user-bubble: #dfecf9;
@@ -70,6 +72,7 @@ try {
     --border: #e1e5ea;
     --text: #1d232b;
     --dim: #6d7784;
+    --code: #4a5561;
     --accent: #2f6fb0;
     --accent-bg: #e7effa;
     --user-bubble: #dfecf9;
@@ -83,7 +86,7 @@ try {
   * { box-sizing: border-box; }
   /* 禁掉浏览器原生下拉刷新：会话/首页滚到顶再拉不会 reload（reload 会把 SPA 弹回首页） */
   html { overscroll-behavior-y: contain; }
-  body { margin: 0; font: 15px/1.6 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+  body { margin: 0; font: 16px/1.7 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
          background: var(--bg); color: var(--text); overscroll-behavior-y: contain; }
   body.insession main { padding-bottom: 145px; }
   button { font: inherit; }
@@ -164,7 +167,7 @@ try {
   .drow .ddot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--dim); }
   .drow.active .ddot { background: var(--ok); }
 
-  main { padding: 12px 16px 40px; max-width: 760px; margin: 0 auto; }
+  main { padding: 12px 20px 40px; max-width: 760px; margin: 0 auto; }
   .notice { text-align: center; color: var(--dim); padding: 30px 10px; }
   /* sticky：长会话滚到底部时报错（发送失败等）也要看得见 */
   #toast { position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%) translateY(6px);
@@ -233,7 +236,7 @@ try {
   #pulltip.ready .arr { transform: rotate(180deg); }
   #pulltip.end .arr { display: none; }
   #list.hidden { display: none; }
-  .msg { margin: 14px 0; }
+  .msg { margin: 18px 0; }
   .msg.user { display: flex; justify-content: flex-end; }
   .msg.user .bubble { background: var(--user-bubble); border-radius: 16px 16px 4px 16px;
                       padding: 9px 13px; max-width: 85%; white-space: pre-wrap; word-break: break-word; }
@@ -243,17 +246,20 @@ try {
   /* markdown */
   .md > :first-child { margin-top: 0; }
   .md > :last-child { margin-bottom: 0; }
-  .md p { margin: 8px 0; }
-  .md h3, .md h4, .md h5, .md h6 { margin: 14px 0 6px; line-height: 1.4; }
-  .md h3 { font-size: 17px; } .md h4 { font-size: 16px; } .md h5, .md h6 { font-size: 15px; }
-  .md ul, .md ol { margin: 8px 0; padding-left: 22px; }
+  .md p { margin: 10px 0; }
+  /* 中文粗体 700 在深底上过于晃眼，600 半粗足够醒目（对标 ChatGPT） */
+  .md strong { font-weight: 600; }
+  .md h3, .md h4, .md h5, .md h6 { margin: 14px 0 6px; line-height: 1.4; font-weight: 600; }
+  .md h3 { font-size: 18px; } .md h4 { font-size: 17px; } .md h5, .md h6 { font-size: 16px; }
+  .md ul, .md ol { margin: 10px 0; padding-left: 22px; }
   .md li { margin: 3px 0; }
-  .md code { font-family: ui-monospace, monospace; font-size: 13px; background: var(--sunken);
-             border: 1px solid var(--border); border-radius: 5px; padding: 1px 5px; overflow-wrap: anywhere; }
+  /* 行内代码：无边框的灰色等宽（小方框会把中文句子切碎），字号随正文缩放 */
+  .md code { font-family: ui-monospace, monospace; font-size: .92em; color: var(--code);
+             background: var(--sunken); border-radius: 5px; padding: 1px 4px; overflow-wrap: anywhere; }
   .md pre { background: var(--sunken); border: 1px solid var(--border); border-radius: 8px;
             padding: 10px 12px; overflow-x: auto; margin: 10px 0; }
-  .md pre code { background: none; border: none; padding: 0; font-size: 12.5px; line-height: 1.5;
-                 white-space: pre; word-break: normal; }
+  .md pre code { background: none; border: none; padding: 0; font-size: 13px; line-height: 1.55;
+                 color: var(--text); white-space: pre; word-break: normal; }
   .md blockquote { margin: 8px 0; padding: 2px 12px; border-left: 3px solid var(--border); color: var(--dim); }
   .md a { color: var(--accent); }
   .md hr { border: none; border-top: 1px solid var(--border); margin: 14px 0; }
@@ -457,7 +463,6 @@ try {
   :root[data-font="large"] .md h3 { font-size: 19px; }
   :root[data-font="large"] .md h4 { font-size: 18px; }
   :root[data-font="large"] .md h5, :root[data-font="large"] .md h6 { font-size: 17px; }
-  :root[data-font="large"] .md code { font-size: 14.5px; }
   :root[data-font="large"] .md pre code { font-size: 14px; }
   :root[data-font="large"] .md table { font-size: 14.5px; }
   :root[data-font="large"] .morelink { font-size: 14.5px; }
