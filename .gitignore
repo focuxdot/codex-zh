@@ -4,6 +4,9 @@ docs/
 examples/
 skills/
 vendor/
+# 例外：Windows 远程接管随包 vendor 的无依赖 QR 编码器（运行时与测试都需要）
+!launcher/win/vendor/
+!launcher/win/vendor/**
 tmp/
 .DS_Store
 .env
