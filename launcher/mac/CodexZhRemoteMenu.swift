@@ -79,12 +79,20 @@ func formatEpochMs(_ ms: Double?) -> String? {
     return fmt.string(from: Date(timeIntervalSince1970: ms / 1000))
 }
 
-// 中部截断长链接用于展示（完整串仍复制），如 https://…abcd#d=…wxyz
+// 中部截断长链接用于展示（完整串仍复制），如 github.io/…abcd#d=…wxyz
 func middleTruncate(_ s: String, _ max: Int) -> String {
     guard s.count > max else { return s }
     let head = max / 2 - 1
     let tail = max - head - 1
     return String(s.prefix(head)) + "…" + String(s.suffix(tail))
+}
+
+// 展示用：让缩略从 github.io 起（隐去 https://用户名. 前缀），一眼可辨是 github.io 开源页面。
+// 仅影响显示，复制到剪贴板的仍是完整 url。非 github.io 链接则退回去掉协议头。
+func linkForDisplay(_ url: String) -> String {
+    if let r = url.range(of: "github.io") { return String(url[r.lowerBound...]) }
+    if let r = url.range(of: "://") { return String(url[r.upperBound...]) }
+    return url
 }
 
 final class MenuController: NSObject, NSMenuDelegate {
@@ -250,7 +258,7 @@ final class MenuController: NSObject, NSMenuDelegate {
         note.widthAnchor.constraint(equalToConstant: 340).isActive = true
 
         // 永久链接：整块可点、点击即复制完整 url（字号放大）
-        let copyBtn = NSButton(title: middleTruncate(url, 46), target: self, action: #selector(copyPermLink(_:)))
+        let copyBtn = NSButton(title: middleTruncate(linkForDisplay(url), 46), target: self, action: #selector(copyPermLink(_:)))
         copyBtn.bezelStyle = .rounded
         copyBtn.font = .systemFont(ofSize: 15, weight: .medium)
         copyBtn.toolTip = "点击复制永久链接"
@@ -278,7 +286,7 @@ final class MenuController: NSObject, NSMenuDelegate {
 
     @objc func copyPermLink(_ sender: NSButton) {
         copyToPasteboard(qrPermURL)
-        flashCopied(sender, restore: middleTruncate(qrPermURL, 44))
+        flashCopied(sender, restore: middleTruncate(linkForDisplay(qrPermURL), 46))
     }
 
     @objc func copyOnceLink(_ sender: NSButton) {
