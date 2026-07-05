@@ -89,27 +89,18 @@ export function generateDownloadBlock({
   dmgName, dmgSha256Name, dmgSha256, // macOS
 }) {
   const cleanVersion = normalizeVersion(version);
-  const checksums = [];
 
   let windowsRow = "| Windows 10 / Windows 11（64 位） | 暂不提供，敬请等待 |";
   if (installerName) {
     const installerUrl = buildAssetDownloadUrl({ repo, tag, assetName: installerName });
     windowsRow = `| Windows 10 / Windows 11（64 位） | [下载 Codex-叉叉 ${cleanVersion} Windows x64 安装包](${installerUrl}) |`;
-    if (sha256Name && sha256) {
-      checksums.push(`- Windows：[\`${sha256Name}\`](${buildAssetDownloadUrl({ repo, tag, assetName: sha256Name })})　SHA256：\`${sha256}\``);
-    }
   }
 
   let macRow = "| macOS | 暂不提供 Codex-叉叉 安装包，不要下载 Windows 版 |";
   if (dmgName) {
     const dmgUrl = buildAssetDownloadUrl({ repo, tag, assetName: dmgName });
     macRow = `| macOS（Apple 芯片 / arm64） | [下载 Codex-叉叉 ${cleanVersion} macOS arm64 安装包](${dmgUrl}) |`;
-    if (dmgSha256Name && dmgSha256) {
-      checksums.push(`- macOS：[\`${dmgSha256Name}\`](${buildAssetDownloadUrl({ repo, tag, assetName: dmgSha256Name })})　SHA256：\`${dmgSha256}\``);
-    }
   }
-
-  const checksumBlock = checksums.length ? `\n校验文件：\n${checksums.join("\n")}\n` : "";
 
   return `${DOWNLOADS_START}
 当前最新版：v${cleanVersion}
@@ -118,10 +109,9 @@ export function generateDownloadBlock({
 | --- | --- |
 ${windowsRow}
 ${macRow}
-| Linux | 暂不提供 Codex-叉叉 安装包，不要下载 Windows 版 |
 
-普通用户只需要下载对应系统的安装包（Windows 是 \`.exe\`，macOS 是 \`.dmg\`）。不要下载 GitHub 页面里的 \`Source code\`，那是源码，不是安装包。
-${checksumBlock}${DOWNLOADS_END}`;
+macOS 版打开时如果提示文件“已损坏”或无法安装，属正常现象，按[常见问题里的说明](#macos-打开时提示已损坏或无法验证开发者)处理即可。
+${DOWNLOADS_END}`;
 }
 
 export function updateDownloadsSection(readme, block) {

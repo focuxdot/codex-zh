@@ -67,13 +67,8 @@ Codex 跑长任务时，你不必守在电脑前：
 | --- | --- |
 | Windows 10 / Windows 11（64 位） | [下载 Codex-叉叉 0.3.0 Windows x64 安装包](https://github.com/focuxdot/codex-zh/releases/download/v0.3.0/Codex-26.608.1337.0%2BZH-0.3.0-win-x64.exe) |
 | macOS（Apple 芯片 / arm64） | [下载 Codex-叉叉 0.3.0 macOS arm64 安装包](https://github.com/focuxdot/codex-zh/releases/download/v0.3.0/Codex-ZH-0.3.0-mac-arm64.dmg) |
-| Linux | 暂不提供 Codex-叉叉 安装包，不要下载 Windows 版 |
 
-普通用户只需要下载对应系统的安装包（Windows 是 `.exe`，macOS 是 `.dmg`）。不要下载 GitHub 页面里的 `Source code`，那是源码，不是安装包。
-
-校验文件：
-- Windows：[`Codex-26.608.1337.0+ZH-0.3.0-win-x64.exe.sha256`](https://github.com/focuxdot/codex-zh/releases/download/v0.3.0/Codex-26.608.1337.0%2BZH-0.3.0-win-x64.exe.sha256)　SHA256：`302cee7624a67424afc7cffd9ef1cc107ab14865426861b42756b22acb7f7135`
-- macOS：[`Codex-ZH-0.3.0-mac-arm64.dmg.sha256`](https://github.com/focuxdot/codex-zh/releases/download/v0.3.0/Codex-ZH-0.3.0-mac-arm64.dmg.sha256)　SHA256：`35ab093e4652807fbb3e489a1791d92c1398e7a997fb622a65ade5ab7fb7d251`
+macOS 版打开时如果提示文件“已损坏”或无法安装，属正常现象，按[常见问题里的说明](#macos-打开时提示已损坏或无法验证开发者)处理即可。
 <!-- codex-zh-downloads:end -->
 
 ## 快速开始
