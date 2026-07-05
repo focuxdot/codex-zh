@@ -1838,8 +1838,9 @@ function sessionRow(s, inproj = false) {
     st.textContent = "运行中";
     sub.appendChild(st);
   }
-  // 项目分组里目录是组头信息，行内不再重复
-  const dir = inproj ? "" : (s.cwd || "").split("/").pop() || s.cwd || "";
+  // 项目分组里目录是组头信息，行内不再重复；托管的每聊天目录名（new-chat-7…）无意义也不显示。
+  // split 用 [\\/] 兼容 Windows 反斜杠路径，否则会把整条 C:\…\x 当成 basename。
+  const dir = (inproj || isManagedChatDir(s.cwd)) ? "" : (s.cwd || "").split(/[\\/]/).pop() || s.cwd || "";
   const rest = [dir, relTime(s.updatedAt)].filter(Boolean).join(" · ");
   if (rest) sub.appendChild(document.createTextNode(`${sub.childNodes.length ? " · " : ""}${rest}`));
   main.appendChild(sub);
@@ -1986,17 +1987,29 @@ function updateFontChecks() {
   $("ckfslarge").textContent = f === "large" ? "✓" : "";
 }
 
+// 归一路径分隔符为 /、去尾分隔符，让同一套规则同时匹配 Windows(\) 与 POSIX(/)。
+function normSep(cwd) {
+  return (cwd || "").trim().replace(/[\\/]+$/, "").replace(/\\/g, "/");
+}
+// 桌面版 Codex 给每个新聊天在 <家>/Documents/Codex/<日期>/<聊天名> 建的托管目录：
+// 目录名是聊天名（new-chat-7、csv-markdown…）而非用户项目，既不该进"项目"，
+// 行内副标题也不该重复展示这个目录名。
+function isManagedChatDir(cwd) {
+  return /(?:^|\/)Documents\/Codex(?:\/|$)/i.test(normSep(cwd));
+}
+
 // "项目"只留真正的工作目录，其余算散聊天：
-// - 桌面版 Codex 给每个新聊天在 ~/Documents/Codex/<日期>/<聊天名> 建的托管目录
-//   （本机会话历史证实的布局），目录名就是聊天名（new-chat、hi…），不是用户的项目
-// - 家目录本身、桌面/文档/下载、临时目录、根目录
+// - 桌面版 Codex 托管的每聊天目录（见 isManagedChatDir）
+// - 家目录本身、桌面/文档/下载、临时目录、盘符根/根目录
+// 分隔符与大小写均归一，兼容 Windows(C:\Users\…\Documents\Codex) 与 POSIX(/Users、/home)。
 function isProjectDir(cwd) {
-  const p = (cwd || "").trim().replace(/\/+$/, "");
-  if (!p || p === "/" || p === "/root") return false;
-  if (/\/Documents\/Codex(?:\/|$)/.test(p)) return false;
-  if (/^\/(?:Users|home)\/[^/]+$/.test(p)) return false;
-  if (/^\/(?:Users|home)\/[^/]+\/(?:Desktop|Documents|Downloads)$/.test(p)) return false;
-  if (/^(?:\/private)?\/tmp(?:\/|$)/.test(p) || /^\/var(?:\/|$)/.test(p)) return false;
+  const p = normSep(cwd);
+  if (!p || p === "/" || p === "/root" || /^[a-z]:$/i.test(p)) return false; // 根 / 盘符根
+  if (isManagedChatDir(p)) return false;                                     // Documents/Codex 托管目录
+  if (/^(?:[a-z]:)?\/(?:Users|home)\/[^/]+$/i.test(p)) return false;         // 家目录本身
+  if (/^(?:[a-z]:)?\/(?:Users|home)\/[^/]+\/(?:Desktop|Documents|Downloads)$/i.test(p)) return false;
+  if (/^(?:\/private)?\/tmp(?:\/|$)/i.test(p) || /^\/var(?:\/|$)/i.test(p)) return false; // POSIX 临时
+  if (/\/AppData\/Local\/Temp(?:\/|$)/i.test(p) || /^[a-z]:\/Windows\/Temp(?:\/|$)/i.test(p)) return false; // Windows 临时
   return true;
 }
 
