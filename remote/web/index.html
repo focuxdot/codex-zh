@@ -688,6 +688,30 @@ const HB_FRAME = '{"t":"hb"}'; // 与 relay 边缘自动应答的匹配串逐字
 const PING_MS = 25000;
 const HB_VERIFY_MS = 5000;
 
+// 从 UA 解读一个便于识别的设备短标签（如「iPhone · 微信」），鉴权时发给电脑端，
+// 让「已配对设备」页显示可读名字而非随机 ID。纯启发式、失败即返回空串（不阻断鉴权）。
+function deviceLabel() {
+  try {
+    const ua = navigator.userAgent || "";
+    let os = "";
+    if (/iPhone/i.test(ua)) os = "iPhone";
+    else if (/iPad/i.test(ua)) os = "iPad";
+    else if (/Android/i.test(ua)) os = "Android";
+    else if (/Macintosh|Mac OS X/i.test(ua)) os = "Mac";
+    else if (/Windows/i.test(ua)) os = "Windows";
+    else if (/Linux/i.test(ua)) os = "Linux";
+    else os = navigator.userAgentData?.platform || "设备";
+    let app = "";
+    if (/MicroMessenger/i.test(ua)) app = "微信";
+    else if (/\bQQ\/|QQBrowser/i.test(ua)) app = "QQ";
+    else if (/Edg[A-Z]?\//i.test(ua)) app = "Edge";
+    else if (/CriOS|Chrome\//i.test(ua)) app = "Chrome";
+    else if (/FxiOS|Firefox\//i.test(ua)) app = "Firefox";
+    else if (/Safari\//i.test(ua)) app = "Safari";
+    return app ? `${os} · ${app}` : os;
+  } catch { return ""; }
+}
+
 class Session {
   constructor(daemonInfo) {
     this.info = daemonInfo;
@@ -739,8 +763,8 @@ class Session {
       ws.onclose = () => { if (this.connEpoch === epoch) this.#onClose(); };
       // 首次用配对码，之后一律用设备令牌；带上本端协议版本
       const authParams = this.info.fromPair
-        ? { pairToken: this.info.tok, protocol: APP_PROTOCOL }
-        : { deviceToken: this.info.deviceToken, protocol: APP_PROTOCOL };
+        ? { pairToken: this.info.tok, protocol: APP_PROTOCOL, name: deviceLabel() }
+        : { deviceToken: this.info.deviceToken, protocol: APP_PROTOCOL, name: deviceLabel() };
       let auth;
       try {
         auth = await this.request("auth", authParams);

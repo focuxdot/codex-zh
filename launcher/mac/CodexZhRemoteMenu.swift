@@ -214,51 +214,66 @@ final class MenuController: NSObject, NSMenuDelegate {
         let stack = NSStackView()
         stack.orientation = .vertical
         stack.alignment = .centerX
-        stack.spacing = 14
-        stack.edgeInsets = NSEdgeInsets(top: 24, left: 24, bottom: 24, right: 24)
+        stack.spacing = 16
+        stack.edgeInsets = NSEdgeInsets(top: 26, left: 28, bottom: 26, right: 28)
 
-        let title = NSTextField(labelWithString: "扫码配对")
-        title.font = .boldSystemFont(ofSize: 16)
+        // 标题、说明、按钮都用系统语义色（labelColor 等），自动跟随系统明暗主题。
+        let title = NSTextField(labelWithString: "微信扫码-配对C叉叉")
+        title.font = .boldSystemFont(ofSize: 20)
 
+        // 二维码垫一张恒定白底卡片（带留白/圆角）：CIQRCodeGenerator 出的是黑码透明底，
+        // 暗色窗口下会"黑底黑码"扫不出；白卡保证明暗两种模式下都清晰可扫。
+        let qrSize: CGFloat = 288
+        let qrPad: CGFloat = 16
+        let qrCard = NSView()
+        qrCard.wantsLayer = true
+        qrCard.layer?.backgroundColor = NSColor.white.cgColor
+        qrCard.layer?.cornerRadius = 14
+        qrCard.translatesAutoresizingMaskIntoConstraints = false
+        qrCard.widthAnchor.constraint(equalToConstant: qrSize + qrPad * 2).isActive = true
+        qrCard.heightAnchor.constraint(equalToConstant: qrSize + qrPad * 2).isActive = true
         let imgView = NSImageView()
-        imgView.image = makeQRImage(url, size: 260)
+        imgView.image = makeQRImage(url, size: qrSize)
         imgView.translatesAutoresizingMaskIntoConstraints = false
-        imgView.widthAnchor.constraint(equalToConstant: 260).isActive = true
-        imgView.heightAnchor.constraint(equalToConstant: 260).isActive = true
+        qrCard.addSubview(imgView)
+        imgView.centerXAnchor.constraint(equalTo: qrCard.centerXAnchor).isActive = true
+        imgView.centerYAnchor.constraint(equalTo: qrCard.centerYAnchor).isActive = true
+        imgView.widthAnchor.constraint(equalToConstant: qrSize).isActive = true
+        imgView.heightAnchor.constraint(equalToConstant: qrSize).isActive = true
 
         let note = NSTextField(labelWithString: "扫码链接长期有效，请勿轻易转发")
         note.textColor = .secondaryLabelColor
         note.alignment = .center
-        note.font = .systemFont(ofSize: 12)
+        note.font = .systemFont(ofSize: 14)
         note.maximumNumberOfLines = 2
         note.translatesAutoresizingMaskIntoConstraints = false
-        note.widthAnchor.constraint(equalToConstant: 300).isActive = true
+        note.widthAnchor.constraint(equalToConstant: 340).isActive = true
 
         // 永久链接：整块可点、点击即复制完整 url（字号放大）
-        let copyBtn = NSButton(title: middleTruncate(url, 44), target: self, action: #selector(copyPermLink(_:)))
+        let copyBtn = NSButton(title: middleTruncate(url, 46), target: self, action: #selector(copyPermLink(_:)))
         copyBtn.bezelStyle = .rounded
-        copyBtn.font = .systemFont(ofSize: 13, weight: .medium)
+        copyBtn.font = .systemFont(ofSize: 15, weight: .medium)
         copyBtn.toolTip = "点击复制永久链接"
         copyBtn.translatesAutoresizingMaskIntoConstraints = false
-        copyBtn.widthAnchor.constraint(equalToConstant: 300).isActive = true
+        copyBtn.widthAnchor.constraint(equalToConstant: 340).isActive = true
 
         let hint = NSTextField(labelWithString: "↑ 点击链接即可复制到剪贴板")
         hint.textColor = .tertiaryLabelColor
-        hint.font = .systemFont(ofSize: 11)
+        hint.font = .systemFont(ofSize: 13)
 
         // 一次性链接：临时发出去用，5 分钟内有效、仅一次
         let onceBtn = NSButton(title: "复制一次性链接（5 分钟）", target: self, action: #selector(copyOnceLink(_:)))
         onceBtn.bezelStyle = .rounded
-        onceBtn.font = .systemFont(ofSize: 12)
+        onceBtn.font = .systemFont(ofSize: 14)
 
         stack.addArrangedSubview(title)
-        stack.addArrangedSubview(imgView)
+        stack.addArrangedSubview(qrCard)
         stack.addArrangedSubview(note)
         stack.addArrangedSubview(copyBtn)
         stack.addArrangedSubview(hint)
-        stack.setCustomSpacing(20, after: hint)
+        stack.setCustomSpacing(22, after: hint)
         stack.addArrangedSubview(onceBtn)
-        makeWindow("扫码配对", stack, width: 360, height: 470)
+        makeWindow("微信扫码-配对C叉叉", stack, width: 400, height: 540)
     }
 
     @objc func copyPermLink(_ sender: NSButton) {
@@ -300,15 +315,16 @@ final class MenuController: NSObject, NSMenuDelegate {
             let id = d["deviceId"] as? String ?? "?"
             let name = (d["name"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "设备 \(id.prefix(6))"
 
-            // 主标题 + 副标题（最近连接时间）竖排
+            // 主标题（可读设备名） + 副标题（最近连接时间 · 短ID，便于区分同名设备）竖排
             let title = NSTextField(labelWithString: name)
+            let idTag = "#\(id.prefix(6))"
             let subtitle: String
             if let seen = formatEpochMs((d["lastSeenAt"] as? NSNumber)?.doubleValue) {
-                subtitle = "最近连接：\(seen)"
+                subtitle = "最近连接：\(seen) · \(idTag)"
             } else if let made = formatEpochMs((d["createdAt"] as? NSNumber)?.doubleValue) {
-                subtitle = "从未连接（配对于 \(made)）"
+                subtitle = "从未连接（配对于 \(made)） · \(idTag)"
             } else {
-                subtitle = "从未连接"
+                subtitle = "从未连接 · \(idTag)"
             }
             let sub = NSTextField(labelWithString: subtitle)
             sub.font = .systemFont(ofSize: 11)

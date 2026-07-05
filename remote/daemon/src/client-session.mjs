@@ -12,6 +12,13 @@ import {
 import { deriveSessionKey, open as sealedOpen, seal } from "./crypto.mjs";
 import { RolloutTail } from "./rollout-tail.mjs";
 
+// 手机端鉴权时上报的设备短标签（如「iPhone · 微信」）净化后作 device.name 显示用：
+// 去控制字符/换行、掐头空白、限长，避免污染配置或菜单显示。非字符串一律成空串。
+function sanitizeDeviceName(s) {
+  if (typeof s !== "string") return "";
+  return s.replace(/[\x00-\x1f\x7f]/g, " ").trim().slice(0, 40);
+}
+
 // 把 app-server 审批请求里的 fileChanges 压缩成 [{path,kind,diff}]。
 // 兼容两种序列化（{type:"update",unified_diff} / {update:{unified_diff}}）；
 // 总量限预算，保证整帧远小于 relay 的 256KiB 上限。
@@ -370,6 +377,9 @@ export class ClientSession {
       this.#device = paired.device;
       // 一次性配对即连接：写入 lastSeenAt，使设备页「最近连接」反映刚连过（createDevice 建时留空）
       paired.device.lastSeenAt = Date.now();
+      // 手机上报的 UA 短标签作可读设备名（如「iPhone · 微信」）
+      const pairName = sanitizeDeviceName(params.name);
+      if (pairName) paired.device.name = pairName;
       saveConfig(this.#daemon.configPath, this.#daemon.config);
       this.#reply(message.id, {
         deviceId: paired.device.deviceId,
@@ -392,6 +402,9 @@ export class ClientSession {
         return;
       }
       device.lastSeenAt = Date.now();
+      // 永久链接设备建时无名；每次连接用手机上报的 UA 短标签刷新可读名
+      const devName = sanitizeDeviceName(params.name);
+      if (devName) device.name = devName;
       saveConfig(this.#daemon.configPath, this.#daemon.config);
       this.#device = device;
       this.#reply(message.id, {
