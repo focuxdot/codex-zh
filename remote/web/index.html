@@ -688,21 +688,40 @@ const HB_FRAME = '{"t":"hb"}'; // 与 relay 边缘自动应答的匹配串逐字
 const PING_MS = 25000;
 const HB_VERIFY_MS = 5000;
 
-// 从 UA 解读一个便于识别的设备短标签（如「iPhone · 微信」），鉴权时发给电脑端，
+// 从 UA 解读一个便于识别的设备短标签（如「华为 · 微信 8.0.40」），鉴权时发给电脑端，
 // 让「已配对设备」页显示可读名字而非随机 ID。纯启发式、失败即返回空串（不阻断鉴权）。
+// Android 厂商：UA 字面含品牌串（华为/荣耀 Build 指纹、SM- 三星等）才可靠识别，
+// 否则退回型号码（比 "Android" 具体）；现代 Chrome 会把型号冻成 "K" 则只能 "Android"。
+function androidVendor(ua) {
+  const brands = [
+    [/honor/i, "荣耀"], [/huawei/i, "华为"],
+    [/redmi/i, "小米"], [/xiaomi/i, "小米"], [/\bMIUI\b/i, "小米"], [/\bPOCO\b/i, "小米"],
+    [/oneplus/i, "一加"], [/realme/i, "realme"], [/\bOPPO\b/i, "OPPO"], [/\bvivo\b/i, "vivo"],
+    [/samsung|\bSM-[A-Z0-9]+/i, "三星"], [/meizu/i, "魅族"], [/nubia/i, "努比亚"],
+    [/lenovo/i, "联想"], [/\bGoogle\b|Pixel/i, "Pixel"], [/OnePlus/i, "一加"],
+  ];
+  for (const [re, name] of brands) if (re.test(ua)) return name;
+  // 退回型号 token：Android <ver>; <MODEL> Build/... 或 …; <MODEL>)
+  const m = ua.match(/Android[\d. ]*;\s*([^;)]+?)\s*(?:Build|;|\))/i);
+  const model = m && m[1] ? m[1].trim() : "";
+  // 小米常见型号码规律（M####…、年份码 2xxx…、Redmi/Mi）——无品牌串时也尽量识别
+  if (model && (/^M\d{4}[A-Z]/i.test(model) || /^2[0-9]{3}[0-9A-Z]{2}/i.test(model) || /^(?:Redmi|Mi[\s-])/i.test(model))) return "小米";
+  return (model && !/^(?:K|wv)$/i.test(model)) ? model : "Android";
+}
 function deviceLabel() {
   try {
     const ua = navigator.userAgent || "";
     let os = "";
     if (/iPhone/i.test(ua)) os = "iPhone";
     else if (/iPad/i.test(ua)) os = "iPad";
-    else if (/Android/i.test(ua)) os = "Android";
+    else if (/Android/i.test(ua)) os = androidVendor(ua);
     else if (/Macintosh|Mac OS X/i.test(ua)) os = "Mac";
     else if (/Windows/i.test(ua)) os = "Windows";
     else if (/Linux/i.test(ua)) os = "Linux";
     else os = navigator.userAgentData?.platform || "设备";
     let app = "";
-    if (/MicroMessenger/i.test(ua)) app = "微信";
+    const wx = ua.match(/MicroMessenger\/([\d.]+)/i);
+    if (wx) app = "微信" + (wx[1] ? " " + wx[1].split(".").slice(0, 3).join(".") : "");
     else if (/\bQQ\/|QQBrowser/i.test(ua)) app = "QQ";
     else if (/Edg[A-Z]?\//i.test(ua)) app = "Edge";
     else if (/CriOS|Chrome\//i.test(ua)) app = "Chrome";
