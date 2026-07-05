@@ -61,19 +61,19 @@ Codex 跑长任务时，你不必守在电脑前：
 ## 下载
 
 <!-- codex-zh-downloads:start -->
-当前最新版：v0.2.0
+当前最新版：v0.3.0
 
 | 你的系统 | 下载哪个版本 |
 | --- | --- |
-| Windows 10 / Windows 11（64 位） | [下载 Codex-叉叉 0.2.0 Windows x64 安装包](https://github.com/focuxdot/codex-zh/releases/download/v0.2.0/Codex-26.608.1337.0%2BZH-0.2.0-win-x64.exe) |
-| macOS（Apple 芯片 / arm64） | [下载 Codex-叉叉 0.2.0 macOS arm64 安装包](https://github.com/focuxdot/codex-zh/releases/download/v0.2.0/Codex-ZH-0.2.0-mac-arm64.dmg) |
+| Windows 10 / Windows 11（64 位） | [下载 Codex-叉叉 0.3.0 Windows x64 安装包](https://github.com/focuxdot/codex-zh/releases/download/v0.3.0/Codex-26.608.1337.0%2BZH-0.3.0-win-x64.exe) |
+| macOS（Apple 芯片 / arm64） | [下载 Codex-叉叉 0.3.0 macOS arm64 安装包](https://github.com/focuxdot/codex-zh/releases/download/v0.3.0/Codex-ZH-0.3.0-mac-arm64.dmg) |
 | Linux | 暂不提供 Codex-叉叉 安装包，不要下载 Windows 版 |
 
 普通用户只需要下载对应系统的安装包（Windows 是 `.exe`，macOS 是 `.dmg`）。不要下载 GitHub 页面里的 `Source code`，那是源码，不是安装包。
 
 校验文件：
-- Windows：[`Codex-26.608.1337.0+ZH-0.2.0-win-x64.exe.sha256`](https://github.com/focuxdot/codex-zh/releases/download/v0.2.0/Codex-26.608.1337.0%2BZH-0.2.0-win-x64.exe.sha256)　SHA256：`c139a5e7d84a7dc33f64bdf3976b7b6bdcb62647dcb74a6ed21f3c4aa81769b8`
-- macOS：[`Codex-ZH-0.2.0-mac-arm64.dmg.sha256`](https://github.com/focuxdot/codex-zh/releases/download/v0.2.0/Codex-ZH-0.2.0-mac-arm64.dmg.sha256)　SHA256：`1c7b441e2a626a171aafbc5684f5ceea074cafd766844c17fdbe5084c5217dfe`
+- Windows：[`Codex-26.608.1337.0+ZH-0.3.0-win-x64.exe.sha256`](https://github.com/focuxdot/codex-zh/releases/download/v0.3.0/Codex-26.608.1337.0%2BZH-0.3.0-win-x64.exe.sha256)　SHA256：`302cee7624a67424afc7cffd9ef1cc107ab14865426861b42756b22acb7f7135`
+- macOS：[`Codex-ZH-0.3.0-mac-arm64.dmg.sha256`](https://github.com/focuxdot/codex-zh/releases/download/v0.3.0/Codex-ZH-0.3.0-mac-arm64.dmg.sha256)　SHA256：`35ab093e4652807fbb3e489a1791d92c1398e7a997fb622a65ade5ab7fb7d251`
 <!-- codex-zh-downloads:end -->
 
 ## 快速开始
