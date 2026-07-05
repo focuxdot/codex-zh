@@ -313,6 +313,12 @@ try {
   .proc-body { display: none; padding-left: 10px; border-left: 2px solid var(--border); }
   .proc.open .proc-body { display: block; }
   .proc-body .msg.assistant { opacity: .75; }
+  /* 组内工具行扁平化：去掉卡片背景/边框、收紧行距（ChatGPT 式的清单感）；
+     点开后的调用详情与输出仍保留卡片，维持可读性 */
+  .proc-body .tool { border: none; background: none; border-radius: 0; margin: 0; }
+  .proc-body .tool-head { padding: 5px 0; }
+  .proc-body .tool-body { border: 1px solid var(--border); border-radius: 8px;
+                          margin: 2px 0 8px; }
   /* diff 着色 */
   .dfile { font-weight: 600; margin: 8px 0 3px; }
   .dfile:first-child { margin-top: 0; }
@@ -3063,7 +3069,8 @@ function resolveApproval(approvalKey) {
 }
 
 // —— 过程组：一轮任务的中间步骤收纳成可折叠容器 ——
-// task_started 开组，中间的工具调用/文件改动/过渡性回复都进组（运行中保持摊开，
+// task_started 记开组状态（DOM 到第一条过程行才挂载，因为 rollout 里它先于
+// user_message），中间的工具调用/文件改动/过渡性回复都进组（运行中保持摊开，
 // 实时可见）；task_complete 收组：末尾的助手消息是本轮结论，挪到组外常显，
 // 其余收拢成一行摘要（"处理了 X 分 X 秒"）。快照回放走同一条路，历史轮次直接呈收拢态。
 function itemTs(item) {
@@ -3071,34 +3078,44 @@ function itemTs(item) {
   return Number.isFinite(t) ? t : null;
 }
 
-function procStart(item, mount) {
+function procStart(item) {
   if (app.proc) procFinish(null); // 上一轮没等到收尾事件（截断/异常）：先按现状收拢
+  // 容器不在此刻挂：rollout 里 task_started 先于 user_message，现在挂 DOM 会跑到
+  // 用户气泡上面。先记起始信息，等第一条过程行到达时再挂载（ensureProc）。
+  app.proc = {
+    wrap: null, body: null, label: null, count: 0,
+    live: !!item, // task_started 开的组；false=快照截断/旧格式的懒开组（不确定是否在跑）
+    startTs: itemTs(item) ?? (item?.payload?.started_at ? item.payload.started_at * 1000 : null),
+  };
+}
+
+function ensureProc(mount) {
+  if (!app.proc) procStart(null);
+  const p = app.proc;
+  if (p.wrap) return p;
   const wrap = document.createElement("div");
-  wrap.className = "proc open" + (item ? " running" : "");
+  wrap.className = "proc open" + (p.live ? " running" : "");
   const head = document.createElement("div");
   head.className = "proc-head";
   const chev = document.createElement("span");
   chev.className = "pchev";
   chev.textContent = "▶";
   const label = document.createElement("span");
-  // 无 task_started 的懒开组（快照截断/旧格式）不知道是否在跑，用中性文案
-  label.textContent = item ? "正在处理…" : "处理过程";
+  label.textContent = p.live ? "正在处理…" : "处理过程";
   head.append(chev, label);
   const body = document.createElement("div");
   body.className = "proc-body";
   head.onclick = () => wrap.classList.toggle("open");
   wrap.append(head, body);
   mount.appendChild(wrap);
-  app.proc = {
-    wrap, body, label, count: 0,
-    startTs: itemTs(item) ?? (item?.payload?.started_at ? item.payload.started_at * 1000 : null),
-  };
+  Object.assign(p, { wrap, body, label });
+  return p;
 }
 
 function procFinish(item, aborted = false) {
   const p = app.proc;
   app.proc = null;
-  if (!p) return;
+  if (!p?.wrap) return; // 从未挂载（纯回复轮或空组）：无痕清掉
   p.wrap.classList.remove("running");
   // 组内末尾的助手消息是本轮最终回复，属于结论不属于过程：挪到组外常显
   const last = p.body.lastElementChild;
@@ -3121,19 +3138,17 @@ function renderInto(items) {
   // 回放（从头读）：新内容追加在下方，读者自己往下滚，绝不替他跳到末尾
   const stick = !app.replayMode && nearBottom();
   const frag = document.createDocumentFragment();
-  // 过程行进组、对话行进 frag；组容器本身是 frag/log 里的一个节点。
-  // 没开组时过程行懒开一个（快照从轮次中间截断时也能在 task_complete 收拢）
+  // 过程行进组、对话行进 frag；组容器在第一条过程行到达时才挂载（ensureProc），
+  // 没开组时懒开一个（快照从轮次中间截断时也能在 task_complete 收拢）
   const sink = (node, toProc) => {
-    if (toProc) {
-      if (!app.proc) procStart(null, frag);
-      app.proc.body.appendChild(node);
-    } else frag.appendChild(node);
+    if (toProc) ensureProc(frag).body.appendChild(node);
+    else frag.appendChild(node);
   };
   for (const item of items) {
     // 轮次事件驱动运行状态（顺序处理，快照回放后落在正确的最终状态）
     if (item?.type === "event_msg") {
       const pt = item.payload?.type;
-      if (pt === "task_started") { tailRunning(true, item.payload?.started_at); procStart(item, frag); }
+      if (pt === "task_started") { tailRunning(true, item.payload?.started_at); procStart(item); }
       else if (pt === "task_complete") { procFinish(item); tailRunning(false); refreshTitle(); }
       else if (pt === "turn_aborted") { procFinish(item, true); tailRunning(false); }
       else if (pt === "token_count") setCtx(item.payload?.info);
@@ -3143,26 +3158,26 @@ function renderInto(items) {
     let node = null;
     let toProc = false;
     if (bubble.cls === "user") {
-      procFinish(null); // 保险：新一轮的用户消息到了，上一组必然已结束（旧格式无轮次事件时靠这里收拢）
+      // 只收"已有内容"的组（旧格式无轮次事件时靠这里收拢上一轮）；
+      // 本轮 task_started 刚记下的未挂载组要留着——它属于这条用户消息开启的轮次
+      if (app.proc?.wrap) procFinish(null);
       consumeEcho(bubble.text); // tail 确认，撤下乐观气泡
       node = bubbleNode(bubble);
     } else if (bubble.cls === "assistant") {
       endStream(); // tail 的完整消息到了，撤下流式草稿
       node = bubbleNode(bubble);
-      toProc = !!app.proc; // 先随过程进组；若是本轮最终回复，procFinish 时挪出组外
+      toProc = !!app.proc; // 先随过程进组（含开头的过渡文字）；本轮最终回复由 procFinish 挪出组外
     } else if (bubble.cls === "tool") {
       node = toolRow(bubble);
       toProc = true;
-      if (!app.proc) procStart(null, frag);
-      app.proc.count++;
+      ensureProc(frag).count++;
     } else if (bubble.cls === "toolout") {
       node = attachToolOutput(bubble); // 通常并入已有调用行，返回 null
       toProc = true;
     } else if (bubble.cls === "diff") {
       node = diffNode(bubble);
       toProc = true;
-      if (!app.proc) procStart(null, frag);
-      app.proc.count++;
+      ensureProc(frag).count++;
     } else if (bubble.cls === "images") {
       if (bubble.user) consumeImgEcho(); // 纯图片消息的乐观气泡在此确认
       node = imagesNode(bubble); // 生成图是结果产物，留在组外常显
