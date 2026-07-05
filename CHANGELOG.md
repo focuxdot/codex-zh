@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.3.0
+
+- Windows 版新增手机远程接管，功能与 macOS 完全一致：系统托盘扫码开启，任务看板、远程审批、发消息/接管/新建会话、多电脑切换、Bark/Server酱/企业微信/钉钉通知，端到端加密、中继零知识、默认关闭。
+- Windows 远程接管支持开机自启与守护保活（通过计划任务后台常驻），关机重登后自动恢复连接。
+- 全面更名为 Codex-叉叉：安装包、快捷方式、界面文案、教程站点与下载说明统一新名称。
+- macOS 首次打开的解隔离方式改为终端执行 `xattr -dr com.apple.quarantine`（自 macOS Sequoia 起，未公证脚本无法再靠双击解除隔离，已移除随包的 `.command` 辅助文件）。
+
 ## v0.2.0
 
 - 新增 macOS 版（Apple 芯片 / arm64）：集成打包官方 Codex.app，中文界面、中转站向导与本地能力对齐 Windows 版；dmg 内附「允许运行 Codex-ZH.command」去隔离助手。
