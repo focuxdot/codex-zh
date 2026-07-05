@@ -41,7 +41,11 @@ export class RelayRoom {
 
     if (role === "daemon") {
       for (const old of this.#state.getWebSockets("daemon")) {
-        old.close(1000, "replaced");
+        try {
+          old.close(1000, "replaced");
+        } catch {
+          // 已失效
+        }
       }
       this.#state.acceptWebSocket(serverEnd, ["daemon"]);
       this.#broadcastToClients({ t: "status", online: true });
@@ -57,7 +61,7 @@ export class RelayRoom {
       // lastSeen 存 DO storage，跨 hibernation/迁移仍可用
       const lastSeen = online ? null : ((await this.#state.storage.get("lastSeen")) ?? null);
       serverEnd.send(JSON.stringify({ t: "status", online, lastSeen }));
-      this.#daemon()?.send(JSON.stringify({ t: "open", cid }));
+      this.#safeSend(this.#daemon(), JSON.stringify({ t: "open", cid }));
     }
     return new Response(null, { status: 101, webSocket: clientEnd });
   }
@@ -95,7 +99,7 @@ export class RelayRoom {
       return;
     }
     const cid = ws.deserializeAttachment()?.cid;
-    if (cid) this.#daemon()?.send(JSON.stringify({ t: "close", cid }));
+    if (cid) this.#safeSend(this.#daemon(), JSON.stringify({ t: "close", cid }));
   }
 
   webSocketError(ws) {
@@ -104,33 +108,51 @@ export class RelayRoom {
 
   #fromDaemon(ws, frame) {
     if (frame.t === "hb") {
-      ws.send(JSON.stringify({ t: "hb" }));
+      this.#safeSend(ws, JSON.stringify({ t: "hb" }));
       return;
     }
     if (typeof frame.cid !== "string") return;
     const client = this.#clientByCid(frame.cid);
     if (!client) return;
     if (frame.t === "msg") {
-      client.send(JSON.stringify({ t: "msg", data: frame.data }));
+      this.#safeSend(client, JSON.stringify({ t: "msg", data: frame.data }));
     } else if (frame.t === "close") {
-      client.close(1000, "closed by daemon");
+      try {
+        client.close(1000, "closed by daemon");
+      } catch {
+        // 已失效
+      }
     }
   }
 
   #fromClient(ws, frame) {
     if (frame.t === "hb") {
-      ws.send('{"t":"hb"}'); // 兜底：auto-response 未生效（非休眠路径）时仍应答
+      this.#safeSend(ws, '{"t":"hb"}'); // 兜底：auto-response 未生效（非休眠路径）时仍应答
       return;
     }
     if (frame.t !== "msg") return;
     const cid = ws.deserializeAttachment()?.cid;
     if (!cid) return;
-    this.#daemon()?.send(JSON.stringify({ t: "msg", cid, data: frame.data }));
+    this.#safeSend(this.#daemon(), JSON.stringify({ t: "msg", cid, data: frame.data }));
   }
 
+  // 休眠列表里可能滞留已断开但未触发 close 回调的 socket（实测会让 send() 抛
+  // "Can't call WebSocket send() after close()" 并把整个 DO 打成 500），
+  // 所以取 daemon 一律过滤 readyState，发送一律走 #safeSend。
   #daemon() {
-    const sockets = this.#state.getWebSockets("daemon");
-    return sockets.length > 0 ? sockets[0] : null;
+    const sockets = this.#state
+      .getWebSockets("daemon")
+      .filter((s) => s.readyState === 1); // 1 = OPEN（workerd 的常量命名有历史差异，用数值最稳）
+    return sockets.length > 0 ? sockets[sockets.length - 1] : null;
+  }
+
+  #safeSend(ws, text) {
+    if (!ws) return;
+    try {
+      ws.send(text);
+    } catch {
+      // 连接已失效，忽略
+    }
   }
 
   #clientByCid(cid) {
