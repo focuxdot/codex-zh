@@ -368,6 +368,9 @@ export class ClientSession {
       }
       this.#daemon.config = paired.config;
       this.#device = paired.device;
+      // 一次性配对即连接：写入 lastSeenAt，使设备页「最近连接」反映刚连过（createDevice 建时留空）
+      paired.device.lastSeenAt = Date.now();
+      saveConfig(this.#daemon.configPath, this.#daemon.config);
       this.#reply(message.id, {
         deviceId: paired.device.deviceId,
         deviceToken: paired.deviceToken,

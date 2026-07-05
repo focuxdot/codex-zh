@@ -69,7 +69,7 @@ final class ConfigController: NSObject, NSWindowDelegate {
             styleMask: [.titled, .closable],
             backing: .buffered, defer: false)
         super.init()
-        window.title = "Codex-ZH 中转站配置"
+        window.title = "Codex-叉叉 中转站配置"
         window.delegate = self
         window.center()
         buildLayout()

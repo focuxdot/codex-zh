@@ -71,6 +71,14 @@ func copyToPasteboard(_ text: String) {
     pb.setString(text, forType: .string)
 }
 
+// epoch 毫秒 → 本地「MM-dd HH:mm」；非法/缺失返回 nil
+func formatEpochMs(_ ms: Double?) -> String? {
+    guard let ms = ms, ms > 0 else { return nil }
+    let fmt = DateFormatter()
+    fmt.dateFormat = "MM-dd HH:mm"
+    return fmt.string(from: Date(timeIntervalSince1970: ms / 1000))
+}
+
 // 中部截断长链接用于展示（完整串仍复制），如 https://…abcd#d=…wxyz
 func middleTruncate(_ s: String, _ max: Int) -> String {
     guard s.count > max else { return s }
@@ -209,7 +217,7 @@ final class MenuController: NSObject, NSMenuDelegate {
         stack.spacing = 14
         stack.edgeInsets = NSEdgeInsets(top: 24, left: 24, bottom: 24, right: 24)
 
-        let title = NSTextField(labelWithString: "扫码配对（永久）")
+        let title = NSTextField(labelWithString: "扫码配对")
         title.font = .boldSystemFont(ofSize: 16)
 
         let imgView = NSImageView()
@@ -218,7 +226,7 @@ final class MenuController: NSObject, NSMenuDelegate {
         imgView.widthAnchor.constraint(equalToConstant: 260).isActive = true
         imgView.heightAnchor.constraint(equalToConstant: 260).isActive = true
 
-        let note = NSTextField(labelWithString: "扫码即永久连接。链接含长期凭据，别转发给别人。")
+        let note = NSTextField(labelWithString: "扫码链接长期有效，请勿轻易转发")
         note.textColor = .secondaryLabelColor
         note.alignment = .center
         note.font = .systemFont(ofSize: 12)
@@ -288,18 +296,37 @@ final class MenuController: NSObject, NSMenuDelegate {
             let row = NSStackView()
             row.orientation = .horizontal
             row.spacing = 10
+            row.alignment = .centerY
             let id = d["deviceId"] as? String ?? "?"
             let name = (d["name"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "设备 \(id.prefix(6))"
-            let label = NSTextField(labelWithString: name)
-            label.translatesAutoresizingMaskIntoConstraints = false
-            label.widthAnchor.constraint(equalToConstant: 220).isActive = true
+
+            // 主标题 + 副标题（最近连接时间）竖排
+            let title = NSTextField(labelWithString: name)
+            let subtitle: String
+            if let seen = formatEpochMs((d["lastSeenAt"] as? NSNumber)?.doubleValue) {
+                subtitle = "最近连接：\(seen)"
+            } else if let made = formatEpochMs((d["createdAt"] as? NSNumber)?.doubleValue) {
+                subtitle = "从未连接（配对于 \(made)）"
+            } else {
+                subtitle = "从未连接"
+            }
+            let sub = NSTextField(labelWithString: subtitle)
+            sub.font = .systemFont(ofSize: 11)
+            sub.textColor = .secondaryLabelColor
+            let col = NSStackView(views: [title, sub])
+            col.orientation = .vertical
+            col.alignment = .leading
+            col.spacing = 2
+            col.translatesAutoresizingMaskIntoConstraints = false
+            col.widthAnchor.constraint(equalToConstant: 220).isActive = true
+
             let btn = NSButton(title: "移除", target: self, action: #selector(revokeTapped(_:)))
             btn.identifier = NSUserInterfaceItemIdentifier(id)
-            row.addArrangedSubview(label)
+            row.addArrangedSubview(col)
             row.addArrangedSubview(btn)
             stack.addArrangedSubview(row)
         }
-        makeWindow("已配对设备", stack, width: 340, height: max(120, CGFloat(60 + devices.count * 36)))
+        makeWindow("已配对设备", stack, width: 360, height: max(140, CGFloat(60 + devices.count * 50)))
     }
 
     @objc func revokeTapped(_ sender: NSButton) {

@@ -70,7 +70,7 @@ function createDevice(config, name = "") {
     tokenHash: null,
     name,
     createdAt: now,
-    lastSeenAt: now,
+    lastSeenAt: null, // 尚未真正连接过；首次鉴权成功时才写入（也用于"新设备首次连接"提醒判定）
   };
   const deviceToken = randomToken();
   device.tokenHash = sha256(deviceToken);
