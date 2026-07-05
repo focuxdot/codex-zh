@@ -7,9 +7,9 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 
 const usage = `Usage:
-  node scripts/build-codex-zh-dmg-mac.mjs --app <Codex-ZH.app> --out-dir <dir> [--version x.y.z] [--volname name]
+  node scripts/build-codex-zh-dmg-mac.mjs --app <Codex-叉叉.app> --out-dir <dir> [--version x.y.z] [--volname name]
 
-Packages the outer Codex-ZH.app into a compressed .dmg with an /Applications
+Packages the outer Codex-叉叉.app into a compressed .dmg with an /Applications
 symlink and Chinese de-quarantine instructions. Outputs:
   Codex-ZH-<version>-mac-arm64.dmg
   Codex-ZH-<version>-mac-arm64.dmg.sha256
@@ -17,51 +17,50 @@ symlink and Chinese de-quarantine instructions. Outputs:
 macOS only (needs hdiutil).
 `;
 
-const FIRST_RUN_TXT = `Codex-ZH（macOS）首次打开说明
+const FIRST_RUN_TXT = `Codex-叉叉（macOS）首次打开说明
+==============================
 
-1. 把 Codex-ZH 拖到左边的“应用程序 / Applications”文件夹。
-2. 这个安装包没有经过 Apple 公证，首次打开会被系统拦住（提示“已损坏”或“无法验证开发者”）。
-   这是正常的，按下面任一方式解除即可：
+第 1 步　安装
+  把左边的 Codex-叉叉 图标，拖到右边的“应用程序 / Applications”文件夹里。
 
-   方式一（推荐，最省事）：
-   - 双击本磁盘里的“允许运行 Codex-ZH.command”，按提示输入开机密码。
-   - 完成后到“应用程序”里打开 Codex-ZH。
+第 2 步　第一次打开会被系统拦住，这是正常的
+  这个软件没有花钱买 Apple 的“公证”，所以第一次打开时，
+  系统会弹窗说“无法验证开发者”或“已损坏”。不是坏了，按下面做一次就好。
+  （做过一次以后，以后每次打开都不会再拦。）
 
-   方式二（手动）：
-   - 打开“终端”，粘贴并回车：
-     xattr -dr com.apple.quarantine /Applications/Codex-ZH.app
-   - 然后到“应用程序”里打开 Codex-ZH。
+  —— 办法 A：终端一行命令（最稳，推荐）——
+  1) 打开“终端”这个 App
+     （在“启动台”里搜“终端”，或按 Command+空格 输入“终端”回车）。
+  2) 把下面这一整行复制进终端，按回车：
 
-3. 首次启动会进入中转站配置向导：选模板、填地址/Key/模型、测试连接、保存并启动。
+     xattr -dr com.apple.quarantine /Applications/Codex-叉叉.app
 
-如果“应用程序”里没有 Codex-ZH，请确认已经把它拖进了 Applications 文件夹。
-`;
+  3) 回到“应用程序”，双击 Codex-叉叉 就能打开了。
 
-const DEQUARANTINE_COMMAND = `#!/bin/bash
-# Remove the download quarantine flag from an installed Codex-ZH so it can open.
-APP="/Applications/Codex-ZH.app"
-if [ ! -d "$APP" ]; then
-  echo "还没有在“应用程序”里找到 Codex-ZH。请先把 Codex-ZH 拖到 Applications 文件夹，再运行本工具。"
-  read -r -p "按回车关闭…" _
-  exit 1
-fi
-echo "正在解除 Codex-ZH 的下载隔离（可能需要输入开机密码）…"
-sudo xattr -dr com.apple.quarantine "$APP"
-echo "完成。正在打开 Codex-ZH…"
-open "$APP"
+  —— 办法 B：在“系统设置”里点“仍要打开”——
+  1) 先到“应用程序”里双击一次 Codex-叉叉（会被拦住，先点“完成”关掉弹窗）。
+  2) 打开“系统设置” → “隐私与安全性”，一直往下拉。
+  3) 会看到一行“已阻止 Codex-叉叉…”，点它右边的“仍要打开”，
+     再按提示点一次“打开”即可。
+
+第 3 步　配置中转站
+  第一次启动会进入配置向导：选模板、填地址 / Key / 模型、测试连接、保存并启动。
+
+小提示
+  如果“应用程序”里找不到 Codex-叉叉，说明第 1 步没拖成功，回到第 1 步再拖一次。
 `;
 
 const args = parseArgs(process.argv.slice(2));
 const app = requiredPath(args.app, "--app");
 const outDir = path.resolve(requiredValue(args["out-dir"], "--out-dir"));
 const version = String(args.version || readPackageVersion());
-const volName = String(args.volname || "Codex-ZH");
+const volName = String(args.volname || "Codex-叉叉");
 
 if (process.platform !== "darwin") {
   fail("This packaging script must run on macOS (needs hdiutil).");
 }
-if (path.basename(app) !== "Codex-ZH.app") {
-  fail(`Expected the outer bundle Codex-ZH.app, got ${path.basename(app)}`);
+if (path.basename(app) !== "Codex-叉叉.app") {
+  fail(`Expected the outer bundle Codex-叉叉.app, got ${path.basename(app)}`);
 }
 
 const baseName = `Codex-ZH-${version}-mac-arm64`;
@@ -74,12 +73,9 @@ rmSync(stageDir, { force: true, recursive: true });
 mkdirSync(stageDir, { recursive: true });
 
 // Lay out the DMG contents: the app, an Applications symlink, and instructions.
-run("ditto", [app, path.join(stageDir, "Codex-ZH.app")]);
+run("ditto", [app, path.join(stageDir, "Codex-叉叉.app")]);
 run("ln", ["-s", "/Applications", path.join(stageDir, "Applications")]);
 writeFileSync(path.join(stageDir, "首次打开必读.txt"), FIRST_RUN_TXT);
-const helper = path.join(stageDir, "允许运行 Codex-ZH.command");
-writeFileSync(helper, DEQUARANTINE_COMMAND);
-run("chmod", ["755", helper]);
 
 rmSync(dmgPath, { force: true });
 run("hdiutil", [

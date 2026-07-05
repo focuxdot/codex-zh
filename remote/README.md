@@ -1,8 +1,8 @@
-# Codex-ZH Remote
+# Codex-叉叉 Remote
 
 手机远程查看/接管电脑上 Codex 的子系统。产品与架构见 [docs/PRD-remote.md](../docs/PRD-remote.md)，协议见 [PROTOCOL.md](PROTOCOL.md)。
 
-> **普通用户（Mac 版）**：装好 Codex-ZH 后无需以下命令行——在配置窗口点「手机远程接管…」，
+> **普通用户（Mac 版）**：装好 Codex-叉叉 后无需以下命令行——在配置窗口点「手机远程接管…」，
 > 从菜单栏「启用手机远程接管」，扫码即可。下面是开发者/自建视角的说明。
 
 ## 目录
@@ -79,10 +79,10 @@ curl https://relay.wokey.ai/   # 验证：应返回 "codex-zh relay ok"
 
 ## Mac 版集成（r0.6）
 
-Remote 随 `Codex-ZH.app` 分发，普通用户零命令行、零 Node 安装即可开启。
+Remote 随 `Codex-叉叉.app` 分发，普通用户零命令行、零 Node 安装即可开启。
 
 **入口与生命周期**
-- 入口：**打开 Codex-ZH 时启动器自动拉起菜单栏控制程序**（`launcher/mac/CodexZhRemoteMenu.swift`），
+- 入口：**打开 Codex-叉叉 时启动器自动拉起菜单栏控制程序**（`launcher/mac/CodexZhRemoteMenu.swift`），
   不依赖配置窗口（已配置过中转站的用户不会再看到配置窗口）。配置窗口的「手机远程接管…」
   按钮是备用入口。菜单程序自带 flock 单实例锁，与启用后常驻的 LaunchAgent 版本不重复。
 - 菜单栏「启用手机远程接管」→ `launcher/mac/remote-backend.mjs enable`：写两个 LaunchAgent

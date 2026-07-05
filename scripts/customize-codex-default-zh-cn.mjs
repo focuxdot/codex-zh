@@ -356,7 +356,7 @@ function patchStartupLoaderLightTheme(root) {
     }
   }
 
-  const startupLabel = '        <div class="startup-loader__label">正在启动 Codex-ZH...</div>';
+  const startupLabel = '        <div class="startup-loader__label">正在启动 Codex-叉叉...</div>';
   if (text.includes(startupLabel)) {
     count += 1;
   } else {

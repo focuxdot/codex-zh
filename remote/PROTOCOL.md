@@ -1,4 +1,4 @@
-# Codex-ZH Remote 协议 v1
+# Codex-叉叉 Remote 协议 v1
 
 三个角色：**daemon**（用户电脑上的守护进程）、**client**（手机/浏览器）、**relay**（中继，Cloudflare Worker 或自托管 Node 变体）。
 

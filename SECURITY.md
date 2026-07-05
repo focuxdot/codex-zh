@@ -26,4 +26,4 @@ Include:
 
 ## Project Boundary
 
-Codex-ZH customizes a user-supplied Codex Desktop app copy at resource level. It must not bypass official authentication, attestation, authorization, or official backend regional restrictions.
+Codex-叉叉 customizes a user-supplied Codex Desktop app copy at resource level. It must not bypass official authentication, attestation, authorization, or official backend regional restrictions.

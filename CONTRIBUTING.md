@@ -1,6 +1,6 @@
-# Contributing to Codex-ZH
+# Contributing to Codex-叉叉
 
-Codex-ZH is a Windows x64 customization and relay-configuration project for Codex Desktop.
+Codex-叉叉 is a Windows x64 customization and relay-configuration project for Codex Desktop.
 
 ## Development Setup
 
@@ -40,7 +40,7 @@ npm run config -- --preset openrouter --model openai/gpt-4.1 --api-key-env OPENR
 
 ## Chinese Logs
 
-Codex-ZH faces Chinese-speaking users, so future logs and release-facing copy should use Simplified Chinese by default.
+Codex-叉叉 faces Chinese-speaking users, so future logs and release-facing copy should use Simplified Chinese by default.
 
 - Commit subjects should keep technical prefixes when useful, but the description must be Chinese, for example `feat: 启动弹窗支持跳过` or `fix: 修复配置向导按钮布局`.
 - CHANGELOG entries, GitHub Release notes, README release sections, and new-feature descriptions must be Chinese.
@@ -59,7 +59,7 @@ Repository-specific GitHub accounts, SSH keys, and commit author identities must
 
 Use GitHub Issues and include:
 
-- Codex-ZH version or commit
+- Codex-叉叉 version or commit
 - Windows version
 - Install path
 - Sanitized `config.toml` snippets when relevant

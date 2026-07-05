@@ -2,7 +2,7 @@
 
 ## Public Positioning
 
-Codex-ZH is for Windows users who want:
+Codex-叉叉 is for Windows users who want:
 
 - Codex Desktop to start with Simplified Chinese UI defaults.
 - A guided way to configure Wokey, OpenRouter, or any OpenAI-compatible relay.
@@ -96,14 +96,14 @@ The source zip must contain a folder with:
 - `Codex.exe`
 - `resources/app.asar`
 
-Do not default release builds to `winget install Codex -s msstore`. That command installs the current Microsoft Store version, so a Store update can silently change the upstream Codex version used by Codex-ZH. Codex-ZH releases should build from an explicitly tested Codex app version and SHA-256.
+Do not default release builds to `winget install Codex -s msstore`. That command installs the current Microsoft Store version, so a Store update can silently change the upstream Codex version used by Codex-叉叉. Codex-叉叉 releases should build from an explicitly tested Codex app version and SHA-256.
 
 When `v*` tag is pushed or a release is published, the workflow:
 
 1. Runs `npm test`.
 2. Installs Inno Setup on the Windows runner.
 3. Downloads and verifies the pinned official Codex app zip.
-4. Builds the staged Codex-ZH app.
+4. Builds the staged Codex-叉叉 app.
 5. Builds the Inno Setup installer and `.sha256` file.
 6. Installs the generated installer silently and runs `codex doctor`.
 7. Creates the GitHub Release when the trigger was a version tag push.

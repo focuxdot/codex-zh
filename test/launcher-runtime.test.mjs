@@ -175,7 +175,7 @@ test("installed shortcuts use native GUI launcher instead of PowerShell", () => 
 test("ASAR customization replaces the transparent black startup loader", () => {
   assert.match(customizer, /patchStartupLoaderLightTheme/u);
   assert.match(customizer, /--startup-background: #f7f7f4;/u);
-  assert.match(customizer, /正在启动 Codex-ZH\.\.\./u);
+  assert.match(customizer, /正在启动 Codex-叉叉\.\.\./u);
   assert.match(customizer, /startup-loader__overlay[\s\S]+startup-loader__label/u);
 });
 

@@ -1,4 +1,4 @@
-# 自建 Codex-ZH Remote relay（Cloudflare Worker）
+# 自建 Codex-叉叉 Remote relay（Cloudflare Worker）
 
 relay 是零知识转发器：只按 `daemonId` 撮合 daemon 与手机的 WebSocket 连接、
 逐字节转发**端到端加密**的载荷，读不到会话内容，也不持有任何令牌或密钥。

@@ -13,7 +13,7 @@ export function buildRequest(n, title, body, link) {
       const base = (n.server || "https://api.day.app").replace(/\/$/, "");
       return {
         url: `${base}/${encodeURIComponent(n.key)}`,
-        init: json({ title, body, group: "Codex-ZH", ...(link ? { url: link } : {}) }),
+        init: json({ title, body, group: "Codex-叉叉", ...(link ? { url: link } : {}) }),
       };
     }
     case "serverchan":

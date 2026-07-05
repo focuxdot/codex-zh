@@ -7,7 +7,7 @@ import { SessionHub } from "../remote/daemon/src/session-hub.mjs";
 test("buildRequest：各 provider 的 URL 与载荷", () => {
   const bark = buildRequest({ type: "bark", key: "ABC123" }, "标题", "正文");
   assert.equal(bark.url, "https://api.day.app/ABC123");
-  assert.deepEqual(JSON.parse(bark.init.body), { title: "标题", body: "正文", group: "Codex-ZH" });
+  assert.deepEqual(JSON.parse(bark.init.body), { title: "标题", body: "正文", group: "Codex-叉叉" });
 
   const barkSelf = buildRequest({ type: "bark", key: "K", server: "https://bark.me/" }, "t", "b");
   assert.equal(barkSelf.url, "https://bark.me/K");

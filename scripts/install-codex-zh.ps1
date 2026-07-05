@@ -22,7 +22,7 @@ foreach ($root in $uninstallRoots) {
   if (!(Test-Path $root)) { continue }
   Get-ChildItem $root | ForEach-Object {
     $item = Get-ItemProperty $_.PSPath
-    if ($item.DisplayName -eq "Codex-ZH" -and $item.UninstallString) {
+    if (($item.DisplayName -eq "Codex-叉叉" -or $item.DisplayName -eq "Codex-ZH") -and $item.UninstallString) {
       $uninstaller = $item.UninstallString.Trim('"')
       if (Test-Path $uninstaller) {
         $uninstallProcess = Start-Process -FilePath $uninstaller -ArgumentList @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART") -Wait -PassThru

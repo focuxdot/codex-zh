@@ -80,15 +80,15 @@ Codex 跑长任务时，你不必守在电脑前：
 
 ### Windows
 
-1. 在上面的“下载”表格里下载 `.exe` 安装包，双击安装并打开 `Codex-ZH`。
+1. 在上面的“下载”表格里下载 `.exe` 安装包，双击安装并打开 `Codex-叉叉`。
 2. 在配置向导里选择模板，填写中转站地址、API Key、模型名。
 3. 点击“测试连接”，通过后点击“保存并启动”。
 
 ### macOS（Apple 芯片）
 
-1. 下载 `.dmg`，打开后把 `Codex-ZH` 拖进「应用程序」。
-2. 首次打开如果提示“已损坏”或“无法验证开发者”，双击 dmg 里附带的「允许运行 Codex-ZH.command」一次即可（原因见常见问题）。
-3. 打开 `Codex-ZH`，配置向导与 Windows 相同：选模板、填地址和 Key、测试连接。
+1. 下载 `.dmg`，打开后把 `Codex-叉叉` 拖进「应用程序」。
+2. 首次打开如果提示“已损坏”或“无法验证开发者”，打开「终端」执行一次 `xattr -dr com.apple.quarantine /Applications/Codex-叉叉.app` 即可（原因和图形界面办法见常见问题）。
+3. 打开 `Codex-叉叉`，配置向导与 Windows 相同：选模板、填地址和 Key、测试连接。
 4. 想用手机远程：点菜单栏的 Codex 图标 →「启用手机远程接管」→「扫码配对」。
 
 仅支持 Apple 芯片（arm64），Intel Mac 不支持。
@@ -174,7 +174,12 @@ C叉叉 会让入口可见、可安装、可启用，并内置必要的本地能
 
 ### macOS 打开时提示“已损坏”或“无法验证开发者”
 
-macOS 安装包目前是 ad-hoc 签名、未经 Apple 公证（项目不依赖 Apple 开发者账号）。双击 dmg 里附带的「允许运行 Codex-ZH.command」，或在终端执行 `xattr -dr com.apple.quarantine /Applications/Codex-ZH.app`，之后正常双击打开即可。只影响首次启动，不影响功能。
+macOS 安装包目前是 ad-hoc 签名、未经 Apple 公证（项目不依赖 Apple 开发者账号）。先把 `Codex-叉叉` 拖进「应用程序」，然后二选一：
+
+- **终端法（最稳）**：打开「终端」执行 `xattr -dr com.apple.quarantine /Applications/Codex-叉叉.app`，之后正常双击打开。
+- **图形界面法**：先双击一次 `Codex-叉叉`（会被拦，点「完成」），再到「系统设置 → 隐私与安全性」往下拉，点「已阻止 Codex-叉叉…」旁边的「仍要打开」。
+
+只影响首次启动，不影响功能。（macOS Sequoia 起，未公证脚本无法再靠双击 `.command` 解隔离，故已移除该辅助文件。）
 
 ### 会上传我的 API Key 吗
 

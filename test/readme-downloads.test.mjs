@@ -81,7 +81,7 @@ test("findReleaseAssets discovers both Windows and macOS assets from .sha256 fil
 });
 
 test("updateDownloadsSection replaces only the marked README downloads block", () => {
-  const readme = `# Codex-ZH 中文版
+  const readme = `# Codex-叉叉 中文版
 
 ## 下载
 

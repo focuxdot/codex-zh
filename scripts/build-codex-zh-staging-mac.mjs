@@ -10,13 +10,13 @@ const usage = `Usage:
 
 Options:
   --project-root <dir>     Repo root (default: cwd)
-  --version <x.y.z>        Codex-ZH version for the outer bundle (default: package.json)
+  --version <x.y.z>        Codex-叉叉 version for the outer bundle (default: package.json)
   --sign-identity <id>     codesign identity (default: "-" ad-hoc)
   --skip-asar              Copy + sign without patching the asar (debug)
   --skip-sign              Patch without re-signing (debug)
 
-Produces <out-dir>/Codex-ZH.app: an outer launcher bundle whose Contents/Resources/
-app/Codex.app is the official macOS Codex app with the Codex-ZH zh-CN + capability
+Produces <out-dir>/Codex-叉叉.app: an outer launcher bundle whose Contents/Resources/
+app/Codex.app is the official macOS Codex app with the Codex-叉叉 zh-CN + capability
 asar patches applied, Info.plist ElectronAsarIntegrity updated, and both bundles
 re-signed (ad-hoc by default). macOS arm64 only.
 `;
@@ -42,6 +42,7 @@ requirePath(customizer, "customizer script");
 requirePath(integrityPatcher, "integrity patcher script");
 requirePath(path.join(macLauncherDir, "Codex-ZH"), "mac launcher entry (launcher/mac/Codex-ZH)");
 requirePath(path.join(macLauncherDir, "codex-zh-launcher.mjs"), "mac launcher orchestrator");
+requirePath(path.join(projectRoot, "launcher", "remote-backend-core.mjs"), "shared remote backend core (launcher/remote-backend-core.mjs)");
 
 // Validate the source bundle shape.
 const srcAsar = path.join(sourceApp, "Contents", "Resources", "app.asar");
@@ -51,10 +52,10 @@ requirePath(srcAsar, "source app.asar");
 requirePath(srcPlist, "source Info.plist");
 requirePath(srcMain, "source Contents/MacOS/Codex");
 
-// Single bundle: Codex-ZH.app IS the patched Codex.app (with our launcher inserted
+// Single bundle: Codex-叉叉.app IS the patched Codex.app (with our launcher inserted
 // as CFBundleExecutable). Nesting Codex.app inside another .app breaks Electron's
 // app-path resolution, so there is no separate outer/inner bundle.
-const stagedApp = path.join(outDir, "Codex-ZH.app");
+const stagedApp = path.join(outDir, "Codex-叉叉.app");
 const workRoot = path.join(outDir, ".work");
 
 mkdirSync(outDir, { recursive: true });
@@ -63,7 +64,7 @@ rmSync(workRoot, { force: true, recursive: true });
 mkdirSync(workRoot, { recursive: true });
 
 // 1) Copy the bundle with ditto to preserve symlinks / bundle metadata.
-log("Copying Codex.app -> Codex-ZH.app with ditto ...");
+log("Copying Codex.app -> Codex-叉叉.app with ditto ...");
 runOrThrow("ditto", [sourceApp, stagedApp]);
 
 const stagedAsar = path.join(stagedApp, "Contents", "Resources", "app.asar");
@@ -142,7 +143,7 @@ assembleLauncher();
 let signSummary = { skipped: true };
 if (!skipSign) {
   const signIdentityLabel = signIdentity === "-" ? "ad-hoc" : "custom";
-  log(`Re-signing Codex-ZH.app (identity: ${signIdentityLabel}) ...`);
+  log(`Re-signing Codex-叉叉.app (identity: ${signIdentityLabel}) ...`);
   runOrThrow("codesign", ["--remove-signature", stagedApp]);
   runOrThrow("codesign", ["--force", "--deep", "--sign", signIdentity, stagedApp]);
   const verify = runOrThrow("codesign", ["--verify", "--deep", "--strict", "--verbose=2", stagedApp], { allowStderr: true });
@@ -175,6 +176,14 @@ function assembleLauncher() {
   // way in the repo and inside the bundle.
   cpSync(srcDir, path.join(codexZhDir, "src"), { recursive: true });
   cpSync(macLauncherDir, path.join(codexZhDir, "launcher", "mac"), { recursive: true });
+  // launcher/mac/remote-backend.mjs imports ../remote-backend-core.mjs (the shared
+  // cross-platform command surface). It lives one level up from launcher/mac, so it
+  // is not covered by the copy above — bundle it explicitly or the daemon menu's
+  // enable/status/pair CLI dies with ERR_MODULE_NOT_FOUND at import time.
+  cpSync(
+    path.join(projectRoot, "launcher", "remote-backend-core.mjs"),
+    path.join(codexZhDir, "launcher", "remote-backend-core.mjs"),
+  );
 
   // Bundle the Remote daemon tree so remote-backend.mjs resolves ../../remote/... and
   // the LaunchAgent can run <bundle>/.../remote/daemon/src/main.mjs with the bundle's
@@ -210,9 +219,9 @@ function assembleLauncher() {
   // app — clicking the icon can open the wrong one, the Dock label flips to
   // "Codex", and the official Sparkle feed could "update" us back to stock.
   // A distinct identifier fixes all three. CFBundleDisplayName must equal the
-  // on-disk base name ("Codex-ZH") or macOS ignores it for anti-spoofing.
+  // on-disk base name ("Codex-叉叉") or macOS ignores it for anti-spoofing.
   setPlistKey(infoPlist, "CFBundleIdentifier", "ai.wokey.codex-zh", "string");
-  setPlistKey(infoPlist, "CFBundleDisplayName", "Codex-ZH", "string");
+  setPlistKey(infoPlist, "CFBundleDisplayName", "Codex-叉叉", "string");
   // CFBundleName is intentionally left as "Codex" so the Electron app's userData
   // / Application Support path is unchanged (login stays in ~/.codex regardless).
 }

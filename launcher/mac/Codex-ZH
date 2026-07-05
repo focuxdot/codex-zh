@@ -15,7 +15,7 @@ if [ ! -x "$NODE" ]; then
   NODE="$(command -v node || true)"
 fi
 if [ -z "${NODE:-}" ] || [ ! -x "$NODE" ]; then
-  osascript -e 'display dialog "找不到可用的 Node 运行时，无法启动 Codex-ZH。" buttons {"好"} default button "好" with title "Codex-ZH"' >/dev/null 2>&1 || true
+  osascript -e 'display dialog "找不到可用的 Node 运行时，无法启动 Codex-叉叉。" buttons {"好"} default button "好" with title "Codex-叉叉"' >/dev/null 2>&1 || true
   exit 1
 fi
 

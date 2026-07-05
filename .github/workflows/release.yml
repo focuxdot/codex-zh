@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Codex-ZH version. Defaults to the package.json version."
+        description: "Codex-叉叉 version. Defaults to the package.json version."
         required: false
         type: string
       source_codex_zip_url:
@@ -255,7 +255,7 @@ jobs:
             & gh release create $env:RELEASE_TAG `
               --repo $env:GITHUB_REPOSITORY `
               --target $env:GITHUB_SHA `
-              --title "Codex-ZH $env:RELEASE_TAG" `
+              --title "Codex-叉叉 $env:RELEASE_TAG" `
               --notes-file $releaseNotesPath
             if ($LASTEXITCODE -ne 0) {
               throw "Failed to create release $env:RELEASE_TAG."
@@ -338,11 +338,11 @@ jobs:
       - name: Build staged app and dmg
         run: |
           node scripts/build-codex-zh-staging-mac.mjs --source-app "$CODEX_SOURCE_APP" --out-dir "$STAGING_DIR" --version "$CODEX_ZH_VERSION"
-          node scripts/build-codex-zh-dmg-mac.mjs --app "$STAGING_DIR/Codex-ZH.app" --out-dir "$RELEASE_OUTPUT_DIR" --version "$CODEX_ZH_VERSION"
+          node scripts/build-codex-zh-dmg-mac.mjs --app "$STAGING_DIR/Codex-叉叉.app" --out-dir "$RELEASE_OUTPUT_DIR" --version "$CODEX_ZH_VERSION"
 
       - name: Smoke test built app
         run: |
-          APP="$STAGING_DIR/Codex-ZH.app"
+          APP="$STAGING_DIR/Codex-叉叉.app"
           codesign --verify --deep --strict "$APP"
           # Run the orchestrator self-test with the runner's Node (avoids depending on
           # the bundle's re-signed Node under CI security policy).
