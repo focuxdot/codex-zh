@@ -4,7 +4,9 @@
 // 用途：
 //   1. Playwright 全链路自检（配对→加密→hb 活性→僵尸重建→断线重连）
 //   2. 单独运行后用浏览器打开 url，即可在本机调试手机页（127.0.0.1 是安全上下文）
-// 用法：node remote/scripts/web-e2e-backend.mjs [--codex <cmd>]
+// 用法：node remote/scripts/web-e2e-backend.mjs [--codex <cmd>] [--share <sessionId>]
+//   --share：为指定会话铸一条围观（只读）链接，输出里多一个 viewerUrl，
+//   浏览器打开即观众态（配合 url 打开创作者页可双端对照调试）。
 import { once } from "node:events";
 import { createServer } from "node:http";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
@@ -16,12 +18,15 @@ import { createRelayServer } from "../relay-node/server.mjs";
 import {
   buildPairPayload,
   issuePairToken,
+  issueViewerToken,
   loadOrCreateConfig,
   saveConfig,
 } from "../daemon/src/config.mjs";
 import { startDaemon } from "../daemon/src/main.mjs";
 
-const { values } = parseArgs({ options: { codex: { type: "string" } } });
+const { values } = parseArgs({
+  options: { codex: { type: "string" }, share: { type: "string" } },
+});
 
 const relay = createRelayServer();
 relay.listen(0, "127.0.0.1");
@@ -64,8 +69,22 @@ await once(web, "listening");
 const payload = Buffer.from(
   JSON.stringify(buildPairPayload(loadOrCreateConfig(configPath), pairToken)),
 ).toString("base64url");
+let viewerUrl;
+if (values.share) {
+  // 围观链接的 base 指向本地静态服务（正式环境是 config.webUrl 的线上页面）
+  const fresh = loadOrCreateConfig(configPath);
+  fresh.webUrl = `http://127.0.0.1:${web.address().port}/index.html`;
+  const { device } = issueViewerToken(configPath, fresh, {
+    sessionId: values.share,
+    sessionName: "e2e 围观",
+  });
+  viewerUrl = device.url;
+}
 console.log(
-  JSON.stringify({ url: `http://127.0.0.1:${web.address().port}/index.html#p=${payload}` }),
+  JSON.stringify({
+    url: `http://127.0.0.1:${web.address().port}/index.html#p=${payload}`,
+    ...(viewerUrl ? { viewerUrl } : {}),
+  }),
 );
 
 function shutdown() {

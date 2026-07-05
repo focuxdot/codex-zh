@@ -8,10 +8,11 @@
 <meta id="mtcdark" name="theme-color" media="(prefers-color-scheme: dark)" content="#171b22">
 <meta id="mtclight" name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff">
 <script>
-// 手动外观在首帧前生效，避免打开瞬间闪一下系统色（正式逻辑在主模块 applyTheme）
+// 手动外观/字体在首帧前生效，避免打开瞬间闪一下系统色或字号跳变（正式逻辑在主模块 applyTheme/applyFontSize）
 try {
   var t = localStorage.getItem("czr-theme");
   if (t === "light" || t === "dark") document.documentElement.dataset.theme = t;
+  if (localStorage.getItem("czr-font") === "large") document.documentElement.dataset.font = "large";
 } catch (e) {}
 </script>
 <meta name="mobile-web-app-capable" content="yes">
@@ -431,6 +432,108 @@ try {
                   border: 1px solid var(--border); }
   .qtag { font-size: 11px; color: var(--dim); margin-top: 3px; }
   .msg.queued { opacity: .8; cursor: pointer; }
+
+  /* 字体两档：默认「常规」即上面的既有字号；data-font="large" 把阅读面（正文/列表/输入/审批）
+     整体调大约一号，界面骨架（图标、按钮、间距）不动。上面新增显式 font-size 的阅读元素时记得同步。 */
+  :root[data-font="large"] body { font-size: 17px; }
+  :root[data-font="large"] header h1 { font-size: 17px; }
+  :root[data-font="large"] #status { font-size: 13px; }
+  :root[data-font="large"] #headline { font-size: 22px; }
+  :root[data-font="large"] #headline .sub { font-size: 14.5px; }
+  :root[data-font="large"] .secthead { font-size: 13px; }
+  :root[data-font="large"] .pname { font-size: 19px; }
+  :root[data-font="large"] .rowsnip { font-size: 14.5px; }
+  :root[data-font="large"] .rowsub { font-size: 13.5px; }
+  :root[data-font="large"] .md h3 { font-size: 19px; }
+  :root[data-font="large"] .md h4 { font-size: 18px; }
+  :root[data-font="large"] .md h5, :root[data-font="large"] .md h6 { font-size: 17px; }
+  :root[data-font="large"] .md code { font-size: 14.5px; }
+  :root[data-font="large"] .md pre code { font-size: 14px; }
+  :root[data-font="large"] .md table { font-size: 14.5px; }
+  :root[data-font="large"] .morelink { font-size: 14.5px; }
+  :root[data-font="large"] .tool-head { font-size: 14px; }
+  :root[data-font="large"] .approval .atitle { font-size: 15.5px; }
+  :root[data-font="large"] .approval .acmd { font-size: 14.5px; }
+  :root[data-font="large"] .approval .acwd, :root[data-font="large"] .approval .adanger { font-size: 13.5px; }
+  :root[data-font="large"] .approval .aall { font-size: 14.5px; }
+  :root[data-font="large"] #topmenu button, :root[data-font="large"] #plusmenu button { font-size: 16.5px; }
+  :root[data-font="large"] #input { font-size: 17.5px; }
+  :root[data-font="large"] #search { font-size: 17px; }
+  :root[data-font="large"] #newchat { font-size: 16.5px; }
+  :root[data-font="large"] #modelbtn { font-size: 16.5px; }
+  :root[data-font="large"] .chip { font-size: 14.5px; }
+
+  /* —— 围观（只读观众态）——
+     观众页 = 创作者页 − 一切触及会话的操作 + 一条身份栏：阅读本体（渲染管线）零改动，
+     这里只按 body.viewer 收掉操作性镶边。daemon 端过滤是第一道防线，此处仅第二道保险。 */
+  body.viewer #back, body.viewer #newsess, body.viewer #sharebtn, body.viewer #homebar,
+  body.viewer #chev, body.viewer #approvals, body.viewer #jump { display: none !important; }
+  body.viewer #card { display: none; }
+  /* 观众保留 ⋯ 菜单（外观/字体/连接状态），收掉组织方式与切换电脑等全权入口 */
+  body.viewer.insession #menubtn { display: block; }
+  body.viewer #topmenu .m-full { display: none; }
+  /* 观众身份栏：沿用 composer 卡片的位置与设计语言 */
+  #viewerbar { display: none; align-items: center; flex-wrap: wrap; gap: 8px 10px;
+               max-width: 760px; margin: 0 auto;
+               background: var(--raised); border: 1px solid var(--border); border-radius: 22px;
+               padding: 12px 16px; font-size: 13px; color: var(--dim);
+               box-shadow: 0 4px 18px rgba(0,0,0,.18); }
+  body.viewer #composer.active #viewerbar { display: flex; }
+  #viewerbar .vbadge { flex: none; border: 1px solid var(--border); background: var(--sunken);
+                       border-radius: 12px; padding: 2px 10px; font-size: 12px; color: var(--text); }
+  #vrun { display: none; flex: none; color: var(--ok); }
+  #vcount { flex: none; }
+  #viewerbar .sp { flex: 1; }
+  /* 喝彩表情排（枚举五枚，匿名廉价的创作燃料） */
+  #vreact { display: flex; gap: 2px; }
+  #vreact button { border: none; background: none; font-size: 18px; padding: 3px 5px;
+                   cursor: pointer; border-radius: 8px; line-height: 1; }
+  #vreact button:active { background: var(--sunken); transform: scale(1.25); }
+  #vshare { flex: none; width: 30px; height: 30px; border: none; border-radius: 50%;
+            background: var(--sunken); color: var(--text); cursor: pointer; padding: 0;
+            display: flex; align-items: center; justify-content: center; }
+  #vshare svg { width: 15px; height: 15px; }
+  #vcta { flex-basis: 100%; text-align: center; color: var(--accent); text-decoration: none;
+          white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12px; }
+  /* 喝彩飘浮：锚在底栏上方，双端（创作者/观众）同款 */
+  .vfloat { position: fixed; bottom: 110px; z-index: 35; font-size: 26px; pointer-events: none;
+            animation: vfloat 1.6s ease-out forwards; }
+  .vfloat .vn { font-size: 13px; color: var(--dim); }
+  @keyframes vfloat { 0% { opacity: 0; transform: translateY(10px) scale(.8); }
+                      15% { opacity: 1; transform: translateY(0) scale(1.1); }
+                      100% { opacity: 0; transform: translateY(-110px) scale(1); } }
+  /* 观众态点创作者的 prompt 气泡即复制（视觉提示：轻微可点感） */
+  body.viewer .msg.user .bubble { cursor: pointer; }
+  /* 围观终态卡（被踢/过期）：中性文案，不渲染成报错 */
+  .vend { text-align: center; padding: 48px 16px; color: var(--dim); }
+  .vend .vtitle { font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 8px; }
+  /* 回放（从头读）：底部继续加载哨兵 */
+  #replaymore { display: none; text-align: center; color: var(--dim); font-size: 13px; padding: 14px 0 20px; }
+  #replaymore.show { display: block; }
+
+  /* —— 分享围观（创作者侧）—— */
+  /* 会话页顶栏分享入口（与 #newsess 同款裸图标按钮） */
+  #sharebtn { flex: none; width: 36px; height: 36px; border: none; border-radius: 50%;
+              background: none; color: var(--text); cursor: pointer; padding: 0;
+              display: none; align-items: center; justify-content: center; }
+  #sharebtn:active { color: var(--dim); }
+  #sharebtn svg { width: 20px; height: 20px; }
+  body.insession #sharebtn { display: flex; }
+  .sharewarn { font-size: 12.5px; color: var(--warn); background: var(--warn-bg);
+               border: 1px solid var(--warn-border); border-radius: 8px; padding: 8px 12px;
+               margin-bottom: 10px; line-height: 1.6; }
+  .sharerow { display: flex; align-items: center; gap: 10px; padding: 12px 10px; border-radius: 10px; }
+  .sharerow .smain { flex: 1; min-width: 0; }
+  .sharerow .sname { font-size: 14px; }
+  .sharerow .ssub { font-size: 12px; color: var(--dim); margin-top: 2px; }
+  .sharerow button { flex: none; border: 1px solid var(--border); background: none; color: var(--text);
+                     border-radius: 8px; padding: 7px 12px; font-size: 13px; cursor: pointer; }
+  .sharerow button.srevoke { color: var(--err); }
+  .sharegen { display: flex; gap: 10px; margin: 12px 0 4px; }
+  .sharegen button { flex: 1; border: 1px solid var(--border); background: var(--sunken);
+                     color: var(--text); border-radius: 10px; padding: 12px; font-size: 14px; cursor: pointer; }
+  .sharegen button:active { background: var(--border); }
+  #shareqr { display: block; margin: 12px auto 4px; background: #fff; padding: 10px; border-radius: 10px; }
 </style>
 </head>
 <body>
@@ -440,21 +543,26 @@ try {
     <h1 id="title">C叉叉<span id="chev">▾</span></h1>
     <span id="status">连接中…</span>
   </div>
+  <button id="sharebtn" aria-label="分享围观（只读）"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg></button>
   <button id="newsess" aria-label="在当前目录新建会话"></button>
   <button id="menubtn" aria-label="更多选项">⋯</button>
 </header>
 <div id="topmenu">
-  <div class="mlabel">组织方式</div>
-  <button data-act="proj"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>按项目<span class="mck" id="ckproj"></span></button>
-  <button data-act="time"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>时间线<span class="mck" id="cktime"></span></button>
-  <hr>
+  <div class="mlabel m-full">组织方式</div>
+  <button data-act="proj" class="m-full"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>按项目<span class="mck" id="ckproj"></span></button>
+  <button data-act="time" class="m-full"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>时间线<span class="mck" id="cktime"></span></button>
+  <hr class="m-full">
   <div class="mlabel">外观</div>
   <button data-act="th-auto"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor" stroke="none"/></svg>跟随系统<span class="mck" id="ckthauto"></span></button>
   <button data-act="th-light"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>浅色<span class="mck" id="ckthlight"></span></button>
   <button data-act="th-dark"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>深色<span class="mck" id="ckthdark"></span></button>
   <hr>
+  <div class="mlabel">字体</div>
+  <button data-act="fs-normal"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>常规<span class="mck" id="ckfsnormal"></span></button>
+  <button data-act="fs-large"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 13h6"/><path d="m2 16 4.5-9 4.5 9"/><path d="M18 16V7"/><path d="m14 11 4-4 4 4"/></svg>大号<span class="mck" id="ckfslarge"></span></button>
+  <hr>
   <div class="mlabel">管理</div>
-  <button data-act="pc"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="12" rx="2"/><path d="M2 20h20"/></svg>切换电脑</button>
+  <button data-act="pc" class="m-full"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="12" rx="2"/><path d="M2 20h20"/></svg>切换电脑</button>
   <button data-act="diag"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>连接状态</button>
 </div>
 <div id="sheet" class="sheet">
@@ -487,6 +595,12 @@ try {
     <div id="modellist"></div>
   </div>
 </div>
+<div id="sharesheet" class="sheet">
+  <div class="sheetbox">
+    <div class="sheethead">分享围观（只读）</div>
+    <div id="sharelist"></div>
+  </div>
+</div>
 <div id="approvals"></div>
 <div id="toast"></div>
 <main>
@@ -496,6 +610,7 @@ try {
     <div id="pulltip"><svg class="arr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></svg><span class="txt"></span></div>
     <div id="sstatus"></div>
     <div id="log"></div>
+    <div id="replaymore">继续加载…</div>
   </div>
 </main>
 <button id="jump" aria-label="回到底部">↓</button>
@@ -504,6 +619,15 @@ try {
   <button id="newchat"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"/><path d="M18.4 2.6a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4z"/></svg>新会话</button>
 </div>
 <div id="composer">
+  <div id="viewerbar">
+    <span class="vbadge">只读围观</span>
+    <span id="vrun"><span class="pulse"></span>Codex 运行中…</span>
+    <span id="vcount"></span>
+    <span class="sp"></span>
+    <span id="vreact"></span>
+    <button id="vshare" aria-label="转发围观"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg></button>
+    <a id="vcta" href="https://focuxdot.github.io/codex-zh/" target="_blank" rel="noopener">想让自己的 Codex 也能这样？</a>
+  </div>
   <div id="plusmenu">
     <!-- 图标与首页/权限图标同一套单色线条，避免 iOS 彩色 emoji 破坏裸排版 -->
     <button data-act="plan"><span class="mic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></svg></span>计划模式<span id="planck" class="mck"></span></button>
@@ -530,6 +654,13 @@ try {
   <input type="file" id="file" accept="image/*" multiple hidden>
   <input type="file" id="tfile" hidden>
 </div>
+<script>
+/* qrcode-generator v1.4.4 — (c) Kazuhiko Arase, MIT License
+   https://github.com/kazuhikoarase/qrcode-generator
+   围观链接二维码渲染用。原样内联的压缩副本（Terser via jsDelivr），勿手改；
+   链接含只读令牌，二维码必须本地生成，绝不可经第三方服务。 */
+var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],f={},c=function(t,r){o=function(t){for(var r=new Array(t),e=0;e<t;e+=1){r[e]=new Array(t);for(var n=0;n<t;n+=1)r[e][n]=null}return r}(i=4*e+17),l(0,0),l(i-7,0),l(0,i-7),s(),h(),d(t,r),e>=7&&v(t),null==a&&(a=p(e,n,u)),w(a,r)},l=function(t,r){for(var e=-1;e<=7;e+=1)if(!(t+e<=-1||i<=t+e))for(var n=-1;n<=7;n+=1)r+n<=-1||i<=r+n||(o[t+e][r+n]=0<=e&&e<=6&&(0==n||6==n)||0<=n&&n<=6&&(0==e||6==e)||2<=e&&e<=4&&2<=n&&n<=4)},h=function(){for(var t=8;t<i-8;t+=1)null==o[t][6]&&(o[t][6]=t%2==0);for(var r=8;r<i-8;r+=1)null==o[6][r]&&(o[6][r]=r%2==0)},s=function(){for(var t=B.getPatternPosition(e),r=0;r<t.length;r+=1)for(var n=0;n<t.length;n+=1){var i=t[r],a=t[n];if(null==o[i][a])for(var u=-2;u<=2;u+=1)for(var f=-2;f<=2;f+=1)o[i+u][a+f]=-2==u||2==u||-2==f||2==f||0==u&&0==f}},v=function(t){for(var r=B.getBCHTypeNumber(e),n=0;n<18;n+=1){var a=!t&&1==(r>>n&1);o[Math.floor(n/3)][n%3+i-8-3]=a}for(n=0;n<18;n+=1){a=!t&&1==(r>>n&1);o[n%3+i-8-3][Math.floor(n/3)]=a}},d=function(t,r){for(var e=n<<3|r,a=B.getBCHTypeInfo(e),u=0;u<15;u+=1){var f=!t&&1==(a>>u&1);u<6?o[u][8]=f:u<8?o[u+1][8]=f:o[i-15+u][8]=f}for(u=0;u<15;u+=1){f=!t&&1==(a>>u&1);u<8?o[8][i-u-1]=f:u<9?o[8][15-u-1+1]=f:o[8][15-u-1]=f}o[i-8][8]=!t},w=function(t,r){for(var e=-1,n=i-1,a=7,u=0,f=B.getMaskFunction(r),c=i-1;c>0;c-=2)for(6==c&&(c-=1);;){for(var g=0;g<2;g+=1)if(null==o[n][c-g]){var l=!1;u<t.length&&(l=1==(t[u]>>>a&1)),f(n,c-g)&&(l=!l),o[n][c-g]=l,-1==(a-=1)&&(u+=1,a=7)}if((n+=e)<0||i<=n){n-=e,e=-e;break}}},p=function(t,r,e){for(var n=A.getRSBlocks(t,r),o=b(),i=0;i<e.length;i+=1){var a=e[i];o.put(a.getMode(),4),o.put(a.getLength(),B.getLengthInBits(a.getMode(),t)),a.write(o)}var u=0;for(i=0;i<n.length;i+=1)u+=n[i].dataCount;if(o.getLengthInBits()>8*u)throw"code length overflow. ("+o.getLengthInBits()+">"+8*u+")";for(o.getLengthInBits()+4<=8*u&&o.put(0,4);o.getLengthInBits()%8!=0;)o.putBit(!1);for(;!(o.getLengthInBits()>=8*u||(o.put(236,8),o.getLengthInBits()>=8*u));)o.put(17,8);return function(t,r){for(var e=0,n=0,o=0,i=new Array(r.length),a=new Array(r.length),u=0;u<r.length;u+=1){var f=r[u].dataCount,c=r[u].totalCount-f;n=Math.max(n,f),o=Math.max(o,c),i[u]=new Array(f);for(var g=0;g<i[u].length;g+=1)i[u][g]=255&t.getBuffer()[g+e];e+=f;var l=B.getErrorCorrectPolynomial(c),h=k(i[u],l.getLength()-1).mod(l);for(a[u]=new Array(l.getLength()-1),g=0;g<a[u].length;g+=1){var s=g+h.getLength()-a[u].length;a[u][g]=s>=0?h.getAt(s):0}}var v=0;for(g=0;g<r.length;g+=1)v+=r[g].totalCount;var d=new Array(v),w=0;for(g=0;g<n;g+=1)for(u=0;u<r.length;u+=1)g<i[u].length&&(d[w]=i[u][g],w+=1);for(g=0;g<o;g+=1)for(u=0;u<r.length;u+=1)g<a[u].length&&(d[w]=a[u][g],w+=1);return d}(o,n)};f.addData=function(t,r){var e=null;switch(r=r||"Byte"){case"Numeric":e=M(t);break;case"Alphanumeric":e=x(t);break;case"Byte":e=m(t);break;case"Kanji":e=L(t);break;default:throw"mode:"+r}u.push(e),a=null},f.isDark=function(t,r){if(t<0||i<=t||r<0||i<=r)throw t+","+r;return o[t][r]},f.getModuleCount=function(){return i},f.make=function(){if(e<1){for(var t=1;t<40;t++){for(var r=A.getRSBlocks(t,n),o=b(),i=0;i<u.length;i++){var a=u[i];o.put(a.getMode(),4),o.put(a.getLength(),B.getLengthInBits(a.getMode(),t)),a.write(o)}var g=0;for(i=0;i<r.length;i++)g+=r[i].dataCount;if(o.getLengthInBits()<=8*g)break}e=t}c(!1,function(){for(var t=0,r=0,e=0;e<8;e+=1){c(!0,e);var n=B.getLostPoint(f);(0==e||t>n)&&(t=n,r=e)}return r}())},f.createTableTag=function(t,r){t=t||2;var e="";e+='<table style="',e+=" border-width: 0px; border-style: none;",e+=" border-collapse: collapse;",e+=" padding: 0px; margin: "+(r=void 0===r?4*t:r)+"px;",e+='">',e+="<tbody>";for(var n=0;n<f.getModuleCount();n+=1){e+="<tr>";for(var o=0;o<f.getModuleCount();o+=1)e+='<td style="',e+=" border-width: 0px; border-style: none;",e+=" border-collapse: collapse;",e+=" padding: 0px; margin: 0px;",e+=" width: "+t+"px;",e+=" height: "+t+"px;",e+=" background-color: ",e+=f.isDark(n,o)?"#000000":"#ffffff",e+=";",e+='"/>';e+="</tr>"}return e+="</tbody>",e+="</table>"},f.createSvgTag=function(t,r,e,n){var o={};"object"==typeof arguments[0]&&(t=(o=arguments[0]).cellSize,r=o.margin,e=o.alt,n=o.title),t=t||2,r=void 0===r?4*t:r,(e="string"==typeof e?{text:e}:e||{}).text=e.text||null,e.id=e.text?e.id||"qrcode-description":null,(n="string"==typeof n?{text:n}:n||{}).text=n.text||null,n.id=n.text?n.id||"qrcode-title":null;var i,a,u,c,g=f.getModuleCount()*t+2*r,l="";for(c="l"+t+",0 0,"+t+" -"+t+",0 0,-"+t+"z ",l+='<svg version="1.1" xmlns="http://www.w3.org/2000/svg"',l+=o.scalable?"":' width="'+g+'px" height="'+g+'px"',l+=' viewBox="0 0 '+g+" "+g+'" ',l+=' preserveAspectRatio="xMinYMin meet"',l+=n.text||e.text?' role="img" aria-labelledby="'+y([n.id,e.id].join(" ").trim())+'"':"",l+=">",l+=n.text?'<title id="'+y(n.id)+'">'+y(n.text)+"</title>":"",l+=e.text?'<description id="'+y(e.id)+'">'+y(e.text)+"</description>":"",l+='<rect width="100%" height="100%" fill="white" cx="0" cy="0"/>',l+='<path d="',a=0;a<f.getModuleCount();a+=1)for(u=a*t+r,i=0;i<f.getModuleCount();i+=1)f.isDark(a,i)&&(l+="M"+(i*t+r)+","+u+c);return l+='" stroke="transparent" fill="black"/>',l+="</svg>"},f.createDataURL=function(t,r){t=t||2,r=void 0===r?4*t:r;var e=f.getModuleCount()*t+2*r,n=r,o=e-r;return I(e,e,(function(r,e){if(n<=r&&r<o&&n<=e&&e<o){var i=Math.floor((r-n)/t),a=Math.floor((e-n)/t);return f.isDark(a,i)?0:1}return 1}))},f.createImgTag=function(t,r,e){t=t||2,r=void 0===r?4*t:r;var n=f.getModuleCount()*t+2*r,o="";return o+="<img",o+=' src="',o+=f.createDataURL(t,r),o+='"',o+=' width="',o+=n,o+='"',o+=' height="',o+=n,o+='"',e&&(o+=' alt="',o+=y(e),o+='"'),o+="/>"};var y=function(t){for(var r="",e=0;e<t.length;e+=1){var n=t.charAt(e);switch(n){case"<":r+="&lt;";break;case">":r+="&gt;";break;case"&":r+="&amp;";break;case'"':r+="&quot;";break;default:r+=n}}return r};return f.createASCII=function(t,r){if((t=t||1)<2)return function(t){t=void 0===t?2:t;var r,e,n,o,i,a=1*f.getModuleCount()+2*t,u=t,c=a-t,g={"██":"█","█ ":"▀"," █":"▄","  ":" "},l={"██":"▀","█ ":"▀"," █":" ","  ":" "},h="";for(r=0;r<a;r+=2){for(n=Math.floor((r-u)/1),o=Math.floor((r+1-u)/1),e=0;e<a;e+=1)i="█",u<=e&&e<c&&u<=r&&r<c&&f.isDark(n,Math.floor((e-u)/1))&&(i=" "),u<=e&&e<c&&u<=r+1&&r+1<c&&f.isDark(o,Math.floor((e-u)/1))?i+=" ":i+="█",h+=t<1&&r+1>=c?l[i]:g[i];h+="\n"}return a%2&&t>0?h.substring(0,h.length-a-1)+Array(a+1).join("▀"):h.substring(0,h.length-1)}(r);t-=1,r=void 0===r?2*t:r;var e,n,o,i,a=f.getModuleCount()*t+2*r,u=r,c=a-r,g=Array(t+1).join("██"),l=Array(t+1).join("  "),h="",s="";for(e=0;e<a;e+=1){for(o=Math.floor((e-u)/t),s="",n=0;n<a;n+=1)i=1,u<=n&&n<c&&u<=e&&e<c&&f.isDark(o,Math.floor((n-u)/t))&&(i=0),s+=i?g:l;for(o=0;o<t;o+=1)h+=s+"\n"}return h.substring(0,h.length-1)},f.renderTo2dContext=function(t,r){r=r||2;for(var e=f.getModuleCount(),n=0;n<e;n++)for(var o=0;o<e;o++)t.fillStyle=f.isDark(n,o)?"black":"white",t.fillRect(n*r,o*r,r,r)},f};t.stringToBytes=(t.stringToBytesFuncs={default:function(t){for(var r=[],e=0;e<t.length;e+=1){var n=t.charCodeAt(e);r.push(255&n)}return r}}).default,t.createStringToBytes=function(t,r){var e=function(){for(var e=S(t),n=function(){var t=e.read();if(-1==t)throw"eof";return t},o=0,i={};;){var a=e.read();if(-1==a)break;var u=n(),f=n()<<8|n();i[String.fromCharCode(a<<8|u)]=f,o+=1}if(o!=r)throw o+" != "+r;return i}(),n="?".charCodeAt(0);return function(t){for(var r=[],o=0;o<t.length;o+=1){var i=t.charCodeAt(o);if(i<128)r.push(i);else{var a=e[t.charAt(o)];"number"==typeof a?(255&a)==a?r.push(a):(r.push(a>>>8),r.push(255&a)):r.push(n)}}return r}};var r,e,n,o,i,a=1,u=2,f=4,c=8,g={L:1,M:0,Q:3,H:2},l=0,h=1,s=2,v=3,d=4,w=5,p=6,y=7,B=(r=[[],[6,18],[6,22],[6,26],[6,30],[6,34],[6,22,38],[6,24,42],[6,26,46],[6,28,50],[6,30,54],[6,32,58],[6,34,62],[6,26,46,66],[6,26,48,70],[6,26,50,74],[6,30,54,78],[6,30,56,82],[6,30,58,86],[6,34,62,90],[6,28,50,72,94],[6,26,50,74,98],[6,30,54,78,102],[6,28,54,80,106],[6,32,58,84,110],[6,30,58,86,114],[6,34,62,90,118],[6,26,50,74,98,122],[6,30,54,78,102,126],[6,26,52,78,104,130],[6,30,56,82,108,134],[6,34,60,86,112,138],[6,30,58,86,114,142],[6,34,62,90,118,146],[6,30,54,78,102,126,150],[6,24,50,76,102,128,154],[6,28,54,80,106,132,158],[6,32,58,84,110,136,162],[6,26,54,82,110,138,166],[6,30,58,86,114,142,170]],e=1335,n=7973,i=function(t){for(var r=0;0!=t;)r+=1,t>>>=1;return r},(o={}).getBCHTypeInfo=function(t){for(var r=t<<10;i(r)-i(e)>=0;)r^=e<<i(r)-i(e);return 21522^(t<<10|r)},o.getBCHTypeNumber=function(t){for(var r=t<<12;i(r)-i(n)>=0;)r^=n<<i(r)-i(n);return t<<12|r},o.getPatternPosition=function(t){return r[t-1]},o.getMaskFunction=function(t){switch(t){case l:return function(t,r){return(t+r)%2==0};case h:return function(t,r){return t%2==0};case s:return function(t,r){return r%3==0};case v:return function(t,r){return(t+r)%3==0};case d:return function(t,r){return(Math.floor(t/2)+Math.floor(r/3))%2==0};case w:return function(t,r){return t*r%2+t*r%3==0};case p:return function(t,r){return(t*r%2+t*r%3)%2==0};case y:return function(t,r){return(t*r%3+(t+r)%2)%2==0};default:throw"bad maskPattern:"+t}},o.getErrorCorrectPolynomial=function(t){for(var r=k([1],0),e=0;e<t;e+=1)r=r.multiply(k([1,C.gexp(e)],0));return r},o.getLengthInBits=function(t,r){if(1<=r&&r<10)switch(t){case a:return 10;case u:return 9;case f:case c:return 8;default:throw"mode:"+t}else if(r<27)switch(t){case a:return 12;case u:return 11;case f:return 16;case c:return 10;default:throw"mode:"+t}else{if(!(r<41))throw"type:"+r;switch(t){case a:return 14;case u:return 13;case f:return 16;case c:return 12;default:throw"mode:"+t}}},o.getLostPoint=function(t){for(var r=t.getModuleCount(),e=0,n=0;n<r;n+=1)for(var o=0;o<r;o+=1){for(var i=0,a=t.isDark(n,o),u=-1;u<=1;u+=1)if(!(n+u<0||r<=n+u))for(var f=-1;f<=1;f+=1)o+f<0||r<=o+f||0==u&&0==f||a==t.isDark(n+u,o+f)&&(i+=1);i>5&&(e+=3+i-5)}for(n=0;n<r-1;n+=1)for(o=0;o<r-1;o+=1){var c=0;t.isDark(n,o)&&(c+=1),t.isDark(n+1,o)&&(c+=1),t.isDark(n,o+1)&&(c+=1),t.isDark(n+1,o+1)&&(c+=1),0!=c&&4!=c||(e+=3)}for(n=0;n<r;n+=1)for(o=0;o<r-6;o+=1)t.isDark(n,o)&&!t.isDark(n,o+1)&&t.isDark(n,o+2)&&t.isDark(n,o+3)&&t.isDark(n,o+4)&&!t.isDark(n,o+5)&&t.isDark(n,o+6)&&(e+=40);for(o=0;o<r;o+=1)for(n=0;n<r-6;n+=1)t.isDark(n,o)&&!t.isDark(n+1,o)&&t.isDark(n+2,o)&&t.isDark(n+3,o)&&t.isDark(n+4,o)&&!t.isDark(n+5,o)&&t.isDark(n+6,o)&&(e+=40);var g=0;for(o=0;o<r;o+=1)for(n=0;n<r;n+=1)t.isDark(n,o)&&(g+=1);return e+=Math.abs(100*g/r/r-50)/5*10},o),C=function(){for(var t=new Array(256),r=new Array(256),e=0;e<8;e+=1)t[e]=1<<e;for(e=8;e<256;e+=1)t[e]=t[e-4]^t[e-5]^t[e-6]^t[e-8];for(e=0;e<255;e+=1)r[t[e]]=e;var n={glog:function(t){if(t<1)throw"glog("+t+")";return r[t]},gexp:function(r){for(;r<0;)r+=255;for(;r>=256;)r-=255;return t[r]}};return n}();function k(t,r){if(void 0===t.length)throw t.length+"/"+r;var e=function(){for(var e=0;e<t.length&&0==t[e];)e+=1;for(var n=new Array(t.length-e+r),o=0;o<t.length-e;o+=1)n[o]=t[o+e];return n}(),n={getAt:function(t){return e[t]},getLength:function(){return e.length},multiply:function(t){for(var r=new Array(n.getLength()+t.getLength()-1),e=0;e<n.getLength();e+=1)for(var o=0;o<t.getLength();o+=1)r[e+o]^=C.gexp(C.glog(n.getAt(e))+C.glog(t.getAt(o)));return k(r,0)},mod:function(t){if(n.getLength()-t.getLength()<0)return n;for(var r=C.glog(n.getAt(0))-C.glog(t.getAt(0)),e=new Array(n.getLength()),o=0;o<n.getLength();o+=1)e[o]=n.getAt(o);for(o=0;o<t.getLength();o+=1)e[o]^=C.gexp(C.glog(t.getAt(o))+r);return k(e,0).mod(t)}};return n}var A=function(){var t=[[1,26,19],[1,26,16],[1,26,13],[1,26,9],[1,44,34],[1,44,28],[1,44,22],[1,44,16],[1,70,55],[1,70,44],[2,35,17],[2,35,13],[1,100,80],[2,50,32],[2,50,24],[4,25,9],[1,134,108],[2,67,43],[2,33,15,2,34,16],[2,33,11,2,34,12],[2,86,68],[4,43,27],[4,43,19],[4,43,15],[2,98,78],[4,49,31],[2,32,14,4,33,15],[4,39,13,1,40,14],[2,121,97],[2,60,38,2,61,39],[4,40,18,2,41,19],[4,40,14,2,41,15],[2,146,116],[3,58,36,2,59,37],[4,36,16,4,37,17],[4,36,12,4,37,13],[2,86,68,2,87,69],[4,69,43,1,70,44],[6,43,19,2,44,20],[6,43,15,2,44,16],[4,101,81],[1,80,50,4,81,51],[4,50,22,4,51,23],[3,36,12,8,37,13],[2,116,92,2,117,93],[6,58,36,2,59,37],[4,46,20,6,47,21],[7,42,14,4,43,15],[4,133,107],[8,59,37,1,60,38],[8,44,20,4,45,21],[12,33,11,4,34,12],[3,145,115,1,146,116],[4,64,40,5,65,41],[11,36,16,5,37,17],[11,36,12,5,37,13],[5,109,87,1,110,88],[5,65,41,5,66,42],[5,54,24,7,55,25],[11,36,12,7,37,13],[5,122,98,1,123,99],[7,73,45,3,74,46],[15,43,19,2,44,20],[3,45,15,13,46,16],[1,135,107,5,136,108],[10,74,46,1,75,47],[1,50,22,15,51,23],[2,42,14,17,43,15],[5,150,120,1,151,121],[9,69,43,4,70,44],[17,50,22,1,51,23],[2,42,14,19,43,15],[3,141,113,4,142,114],[3,70,44,11,71,45],[17,47,21,4,48,22],[9,39,13,16,40,14],[3,135,107,5,136,108],[3,67,41,13,68,42],[15,54,24,5,55,25],[15,43,15,10,44,16],[4,144,116,4,145,117],[17,68,42],[17,50,22,6,51,23],[19,46,16,6,47,17],[2,139,111,7,140,112],[17,74,46],[7,54,24,16,55,25],[34,37,13],[4,151,121,5,152,122],[4,75,47,14,76,48],[11,54,24,14,55,25],[16,45,15,14,46,16],[6,147,117,4,148,118],[6,73,45,14,74,46],[11,54,24,16,55,25],[30,46,16,2,47,17],[8,132,106,4,133,107],[8,75,47,13,76,48],[7,54,24,22,55,25],[22,45,15,13,46,16],[10,142,114,2,143,115],[19,74,46,4,75,47],[28,50,22,6,51,23],[33,46,16,4,47,17],[8,152,122,4,153,123],[22,73,45,3,74,46],[8,53,23,26,54,24],[12,45,15,28,46,16],[3,147,117,10,148,118],[3,73,45,23,74,46],[4,54,24,31,55,25],[11,45,15,31,46,16],[7,146,116,7,147,117],[21,73,45,7,74,46],[1,53,23,37,54,24],[19,45,15,26,46,16],[5,145,115,10,146,116],[19,75,47,10,76,48],[15,54,24,25,55,25],[23,45,15,25,46,16],[13,145,115,3,146,116],[2,74,46,29,75,47],[42,54,24,1,55,25],[23,45,15,28,46,16],[17,145,115],[10,74,46,23,75,47],[10,54,24,35,55,25],[19,45,15,35,46,16],[17,145,115,1,146,116],[14,74,46,21,75,47],[29,54,24,19,55,25],[11,45,15,46,46,16],[13,145,115,6,146,116],[14,74,46,23,75,47],[44,54,24,7,55,25],[59,46,16,1,47,17],[12,151,121,7,152,122],[12,75,47,26,76,48],[39,54,24,14,55,25],[22,45,15,41,46,16],[6,151,121,14,152,122],[6,75,47,34,76,48],[46,54,24,10,55,25],[2,45,15,64,46,16],[17,152,122,4,153,123],[29,74,46,14,75,47],[49,54,24,10,55,25],[24,45,15,46,46,16],[4,152,122,18,153,123],[13,74,46,32,75,47],[48,54,24,14,55,25],[42,45,15,32,46,16],[20,147,117,4,148,118],[40,75,47,7,76,48],[43,54,24,22,55,25],[10,45,15,67,46,16],[19,148,118,6,149,119],[18,75,47,31,76,48],[34,54,24,34,55,25],[20,45,15,61,46,16]],r=function(t,r){var e={};return e.totalCount=t,e.dataCount=r,e},e={};return e.getRSBlocks=function(e,n){var o=function(r,e){switch(e){case g.L:return t[4*(r-1)+0];case g.M:return t[4*(r-1)+1];case g.Q:return t[4*(r-1)+2];case g.H:return t[4*(r-1)+3];default:return}}(e,n);if(void 0===o)throw"bad rs block @ typeNumber:"+e+"/errorCorrectionLevel:"+n;for(var i=o.length/3,a=[],u=0;u<i;u+=1)for(var f=o[3*u+0],c=o[3*u+1],l=o[3*u+2],h=0;h<f;h+=1)a.push(r(c,l));return a},e}(),b=function(){var t=[],r=0,e={getBuffer:function(){return t},getAt:function(r){var e=Math.floor(r/8);return 1==(t[e]>>>7-r%8&1)},put:function(t,r){for(var n=0;n<r;n+=1)e.putBit(1==(t>>>r-n-1&1))},getLengthInBits:function(){return r},putBit:function(e){var n=Math.floor(r/8);t.length<=n&&t.push(0),e&&(t[n]|=128>>>r%8),r+=1}};return e},M=function(t){var r=a,e=t,n={getMode:function(){return r},getLength:function(t){return e.length},write:function(t){for(var r=e,n=0;n+2<r.length;)t.put(o(r.substring(n,n+3)),10),n+=3;n<r.length&&(r.length-n==1?t.put(o(r.substring(n,n+1)),4):r.length-n==2&&t.put(o(r.substring(n,n+2)),7))}},o=function(t){for(var r=0,e=0;e<t.length;e+=1)r=10*r+i(t.charAt(e));return r},i=function(t){if("0"<=t&&t<="9")return t.charCodeAt(0)-"0".charCodeAt(0);throw"illegal char :"+t};return n},x=function(t){var r=u,e=t,n={getMode:function(){return r},getLength:function(t){return e.length},write:function(t){for(var r=e,n=0;n+1<r.length;)t.put(45*o(r.charAt(n))+o(r.charAt(n+1)),11),n+=2;n<r.length&&t.put(o(r.charAt(n)),6)}},o=function(t){if("0"<=t&&t<="9")return t.charCodeAt(0)-"0".charCodeAt(0);if("A"<=t&&t<="Z")return t.charCodeAt(0)-"A".charCodeAt(0)+10;switch(t){case" ":return 36;case"$":return 37;case"%":return 38;case"*":return 39;case"+":return 40;case"-":return 41;case".":return 42;case"/":return 43;case":":return 44;default:throw"illegal char :"+t}};return n},m=function(r){var e=f,n=t.stringToBytes(r),o={getMode:function(){return e},getLength:function(t){return n.length},write:function(t){for(var r=0;r<n.length;r+=1)t.put(n[r],8)}};return o},L=function(r){var e=c,n=t.stringToBytesFuncs.SJIS;if(!n)throw"sjis not supported.";!function(){var t=n("友");if(2!=t.length||38726!=(t[0]<<8|t[1]))throw"sjis not supported."}();var o=n(r),i={getMode:function(){return e},getLength:function(t){return~~(o.length/2)},write:function(t){for(var r=o,e=0;e+1<r.length;){var n=(255&r[e])<<8|255&r[e+1];if(33088<=n&&n<=40956)n-=33088;else{if(!(57408<=n&&n<=60351))throw"illegal char at "+(e+1)+"/"+n;n-=49472}n=192*(n>>>8&255)+(255&n),t.put(n,13),e+=2}if(e<r.length)throw"illegal char at "+(e+1)}};return i},D=function(){var t=[],r={writeByte:function(r){t.push(255&r)},writeShort:function(t){r.writeByte(t),r.writeByte(t>>>8)},writeBytes:function(t,e,n){e=e||0,n=n||t.length;for(var o=0;o<n;o+=1)r.writeByte(t[o+e])},writeString:function(t){for(var e=0;e<t.length;e+=1)r.writeByte(t.charCodeAt(e))},toByteArray:function(){return t},toString:function(){var r="";r+="[";for(var e=0;e<t.length;e+=1)e>0&&(r+=","),r+=t[e];return r+="]"}};return r},S=function(t){var r=t,e=0,n=0,o=0,i={read:function(){for(;o<8;){if(e>=r.length){if(0==o)return-1;throw"unexpected end of file./"+o}var t=r.charAt(e);if(e+=1,"="==t)return o=0,-1;t.match(/^\s$/)||(n=n<<6|a(t.charCodeAt(0)),o+=6)}var i=n>>>o-8&255;return o-=8,i}},a=function(t){if(65<=t&&t<=90)return t-65;if(97<=t&&t<=122)return t-97+26;if(48<=t&&t<=57)return t-48+52;if(43==t)return 62;if(47==t)return 63;throw"c:"+t};return i},I=function(t,r,e){for(var n=function(t,r){var e=t,n=r,o=new Array(t*r),i={setPixel:function(t,r,n){o[r*e+t]=n},write:function(t){t.writeString("GIF87a"),t.writeShort(e),t.writeShort(n),t.writeByte(128),t.writeByte(0),t.writeByte(0),t.writeByte(0),t.writeByte(0),t.writeByte(0),t.writeByte(255),t.writeByte(255),t.writeByte(255),t.writeString(","),t.writeShort(0),t.writeShort(0),t.writeShort(e),t.writeShort(n),t.writeByte(0);var r=a(2);t.writeByte(2);for(var o=0;r.length-o>255;)t.writeByte(255),t.writeBytes(r,o,255),o+=255;t.writeByte(r.length-o),t.writeBytes(r,o,r.length-o),t.writeByte(0),t.writeString(";")}},a=function(t){for(var r=1<<t,e=1+(1<<t),n=t+1,i=u(),a=0;a<r;a+=1)i.add(String.fromCharCode(a));i.add(String.fromCharCode(r)),i.add(String.fromCharCode(e));var f,c,g,l=D(),h=(f=l,c=0,g=0,{write:function(t,r){if(t>>>r!=0)throw"length over";for(;c+r>=8;)f.writeByte(255&(t<<c|g)),r-=8-c,t>>>=8-c,g=0,c=0;g|=t<<c,c+=r},flush:function(){c>0&&f.writeByte(g)}});h.write(r,n);var s=0,v=String.fromCharCode(o[s]);for(s+=1;s<o.length;){var d=String.fromCharCode(o[s]);s+=1,i.contains(v+d)?v+=d:(h.write(i.indexOf(v),n),i.size()<4095&&(i.size()==1<<n&&(n+=1),i.add(v+d)),v=d)}return h.write(i.indexOf(v),n),h.write(e,n),h.flush(),l.toByteArray()},u=function(){var t={},r=0,e={add:function(n){if(e.contains(n))throw"dup key:"+n;t[n]=r,r+=1},size:function(){return r},indexOf:function(r){return t[r]},contains:function(r){return void 0!==t[r]}};return e};return i}(t,r),o=0;o<r;o+=1)for(var i=0;i<t;i+=1)n.setPixel(i,o,e(i,o));var a=D();n.write(a);for(var u=function(){var t=0,r=0,e=0,n="",o={},i=function(t){n+=String.fromCharCode(a(63&t))},a=function(t){if(t<0);else{if(t<26)return 65+t;if(t<52)return t-26+97;if(t<62)return t-52+48;if(62==t)return 43;if(63==t)return 47}throw"n:"+t};return o.writeByte=function(n){for(t=t<<8|255&n,r+=8,e+=1;r>=6;)i(t>>>r-6),r-=6},o.flush=function(){if(r>0&&(i(t<<6-r),t=0,r=0),e%3!=0)for(var o=3-e%3,a=0;a<o;a+=1)n+="="},o.toString=function(){return n},o}(),f=a.toByteArray(),c=0;c<f.length;c+=1)u.writeByte(f[c]);return u.flush(),"data:image/gif;base64,"+u};return t}();qrcode.stringToBytesFuncs["UTF-8"]=function(t){return function(t){for(var r=[],e=0;e<t.length;e++){var n=t.charCodeAt(e);n<128?r.push(n):n<2048?r.push(192|n>>6,128|63&n):n<55296||n>=57344?r.push(224|n>>12,128|n>>6&63,128|63&n):(e++,n=65536+((1023&n)<<10|1023&t.charCodeAt(e)),r.push(240|n>>18,128|n>>12&63,128|n>>6&63,128|63&n))}return r}(t)},function(t){"function"==typeof define&&define.amd?define([],t):"object"==typeof exports&&(module.exports=t())}((function(){return qrcode}));
+</script>
 <script type="module">
 const $ = (id) => document.getElementById(id);
 const enc = new TextEncoder();
@@ -565,13 +696,37 @@ function saveDaemon(info) {
 }
 function setActiveDaemon(id) { localStorage.setItem("czr-active", id); }
 
+// 本浏览器身份：存在 localStorage 的稳定随机 id（按浏览器+站点隔离，故微信/Chrome/Firefox
+// 各自不同）。鉴权时上报，电脑端据此把"同一浏览器"的多次配对归并成一台设备，而不是每扫一次
+// 二维码就多一台。清了缓存会重新生成 = 当作新浏览器（优雅降级）。非机密、不参与鉴权。
+function clientId() {
+  try {
+    let id = localStorage.getItem("czr-client");
+    if (!id) {
+      id = (crypto.randomUUID?.() || [...crypto.getRandomValues(new Uint8Array(16))]
+        .map((b) => b.toString(16).padStart(2, "0")).join("")).replace(/[^A-Za-z0-9_-]/g, "");
+      localStorage.setItem("czr-client", id);
+    }
+    return id;
+  } catch { return ""; } // 无 localStorage（隐私模式等）：不带 id，退回旧行为
+}
+
 // 决定本次要连接的电脑：配对码优先 -> 上次活跃 -> 列表第一个
 function loadDaemonInfo() {
   const hash = new URLSearchParams(location.hash.slice(1));
   if (hash.get("d")) {
+    const raw = hash.get("d");
     // 永久链接：内嵌长期设备令牌，自包含，不依赖 localStorage（微信清存储/重复点也能连）
-    const payload = JSON.parse(new TextDecoder().decode(b64.from(hash.get("d"))));
+    const payload = JSON.parse(new TextDecoder().decode(b64.from(raw)));
     history.replaceState(null, "", location.pathname); // 凭据移出地址栏（聊天记录里的原链接仍完整，故重复点可用）
+    if (payload.ro === 1) {
+      // 围观链接（只读观众态）。ro/sid/sname 仅是显示提示，权限判定一律在 daemon 端。
+      // 凭据只存 sessionStorage（供刷新恢复与"转发围观"），绝不进 czr-daemons——
+      // 混入"切换电脑"列表会留下一个只读残影。聊天记录里的链接本身就是持久入口。
+      const info = { ...payload, deviceToken: payload.dtok, fromPair: false, viewer: true, raw };
+      try { sessionStorage.setItem("czr-viewer", JSON.stringify(info)); } catch {}
+      return info;
+    }
     return { ...payload, deviceToken: payload.dtok, fromPair: false };
   }
   if (hash.get("p")) {
@@ -579,11 +734,33 @@ function loadDaemonInfo() {
     history.replaceState(null, "", location.pathname); // 配对码不留在地址栏
     return { ...payload, fromPair: true };
   }
+  // 观众态刷新恢复：hash 已被 replaceState 抹掉，凭据在本标签页的 sessionStorage 里
+  try {
+    const v = JSON.parse(sessionStorage.getItem("czr-viewer") || "null");
+    if (v?.viewer && v.deviceToken) return v;
+  } catch {}
   const daemons = loadStore();
   const active = localStorage.getItem("czr-active");
   if (active && daemons[active]) return daemons[active];
   const first = Object.values(daemons)[0];
   return first || null;
+}
+
+// 复制到剪贴板：clipboard API 优先，失败退回 execCommand（微信内核等旧环境兜底）
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {}
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.style.cssText = "position:fixed;opacity:0";
+  document.body.appendChild(ta);
+  ta.select();
+  let ok = false;
+  try { ok = document.execCommand("copy"); } catch {}
+  ta.remove();
+  return ok;
 }
 
 // —— 纯 JS X25519 后备（RFC 7748，BigInt）——
@@ -750,6 +927,8 @@ class Session {
     this.onStatus = () => {};   // (patch) 链路状态增量：{link?, daemon?, lastSeen?}
     this.onReady = () => {};    // 每次（重）鉴权成功后回调，供上层重拉/重watch
     this.onAuthFail = () => {};  // 令牌被撤销/失效（403）：终态回调，上层停重连并引导重配对
+    this.awaitingAuth = false;  // 本次连接的鉴权尚未确认前，不信中继乐观的 online（防"标绿却连不上"）
+    this.needsReauth = false;   // 后台鉴权超时时置位，回前台由 ensureAlive 强制重连重鉴权
   }
 
   async start() {
@@ -782,9 +961,10 @@ class Session {
       ws.onclose = () => { if (this.connEpoch === epoch) this.#onClose(); };
       // 首次用配对码，之后一律用设备令牌；带上本端协议版本
       const authParams = this.info.fromPair
-        ? { pairToken: this.info.tok, protocol: APP_PROTOCOL, name: deviceLabel() }
-        : { deviceToken: this.info.deviceToken, protocol: APP_PROTOCOL, name: deviceLabel() };
+        ? { pairToken: this.info.tok, protocol: APP_PROTOCOL, name: deviceLabel(), clientId: clientId() }
+        : { deviceToken: this.info.deviceToken, protocol: APP_PROTOCOL, name: deviceLabel(), clientId: clientId() };
       let auth;
+      this.awaitingAuth = true; // 鉴权确认前不让中继乐观的 online 把界面标绿
       try {
         auth = await this.request("auth", authParams);
       } catch (err) {
@@ -797,12 +977,17 @@ class Session {
           this.onAuthFail(err);
           return;
         }
-        throw err;
+        // 手机↔中继是通的，但电脑没在超时内应答鉴权——最常见是电脑断网/睡眠，中继还没
+        // 察觉它掉线仍报 online。别沿用这份乐观状态标绿：明确标"电脑离线"，退避重试等它恢复。
+        // awaitingAuth 保持 true：等待期间若中继又发来乐观 online，仍按"未知"处理不标绿。
+        this.onStatus({ link: "ok", daemon: false, engine: null });
+        this.#retryAuth();
+        return;
       }
       if (this.connEpoch !== epoch) return;
-      if (auth.deviceToken) {
+      if (auth.deviceToken && !this.info.viewer) {
         this.info = { ...this.info, fromPair: false, deviceToken: auth.deviceToken, name: auth.daemonName };
-        saveDaemon(this.info); // 配对成功即入库并设为活跃
+        saveDaemon(this.info); // 配对成功即入库并设为活跃（观众凭据永不入库）
       }
       // 电脑端协议更新：PWA 可能缓存了旧代码。装到主屏幕后没有"下拉刷新"，
       // 横幅本身就是刷新按钮
@@ -811,6 +996,10 @@ class Session {
       }
       this.reconnectAttempt = 0;
       this.startPing();
+      // 鉴权确认电脑可用——此后才允许标绿；清掉后台重鉴权标记
+      this.awaitingAuth = false;
+      this.needsReauth = false;
+      this.onStatus({ link: "ok", daemon: true });
       this.onReady(auth);
     } catch (err) {
       if (this.connEpoch !== epoch) return; // 过期尝试的失败静默丢弃，不再触发重连
@@ -834,6 +1023,21 @@ class Session {
     const delay = this.reconnectAttempt === 0 ? 300 : Math.min(1000 * 2 ** this.reconnectAttempt, 15000);
     this.reconnectAttempt += 1;
     this.onStatus({ link: "down" });
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      this.#openAndAuth().catch(() => this.#onClose());
+    }, delay);
+  }
+
+  // 鉴权超时/失败（非 403，且手机↔中继仍正常）：电脑暂不可达，退避重连重鉴权，
+  // 等电脑恢复后自动接上。与 #onClose 分工：onClose 处理"中继断开"，这里处理"中继在、
+  // 电脑不应答"——所以保留 link:ok，不误报成手机网络问题。
+  #retryAuth() {
+    if (this.closedByUser || this.dead) return;
+    if (this.reconnectTimer) return; // 已有重连排队，不叠加
+    if (document.visibilityState !== "visible") { this.needsReauth = true; return; } // 后台不轮询
+    const delay = this.reconnectAttempt === 0 ? 800 : Math.min(1000 * 2 ** this.reconnectAttempt, 15000);
+    this.reconnectAttempt += 1;
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       this.#openAndAuth().catch(() => this.#onClose());
@@ -883,6 +1087,13 @@ class Session {
   // 回到前台/网络恢复时调用：断了立即重连；看似 OPEN 也要验活（iOS 僵尸 socket）
   ensureAlive() {
     if (this.closedByUser || this.dead) return;
+    // 后台鉴权超时留下的欠账：socket 看着还 OPEN 但从未鉴权成功，单纯 ping 没用，
+    // 必须重建以重新握手+重鉴权（否则回前台会卡在"电脑离线"）。
+    if (this.needsReauth) {
+      this.needsReauth = false;
+      this.#rebuild();
+      return;
+    }
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
@@ -913,7 +1124,10 @@ class Session {
       return;
     }
     if (frame.t === "status") {
-      this.onStatus({ link: "ok", daemon: frame.online, lastSeen: frame.lastSeen ?? null });
+      // 电脑是否可用以"鉴权成功"为准，而非中继单方面的 online：电脑断网后中继要过一会
+      // 才察觉、期间仍报 online。鉴权确认前，online 只当"未知"，避免标绿却其实连不上。
+      const daemon = (this.awaitingAuth && frame.online) ? null : frame.online;
+      this.onStatus({ link: "ok", daemon, lastSeen: frame.lastSeen ?? null });
       return;
     }
     if (frame.t !== "msg") return;
@@ -1378,7 +1592,7 @@ function bubbleNode({ cls, text }) {
   return msg;
 }
 
-// —— 链路状态（三层：手机↔中继 / 中继↔电脑 / Codex 引擎）——
+// —— 链路状态（三层：手机↔中继 / 中继↔电脑 / Codex 主程序）——
 const net = {
   link: "connecting",  // "connecting" | "ok" | "down"
   daemon: null,        // null=未知 | true | false（relay status 帧）
@@ -1421,6 +1635,12 @@ const app = {
   runTimer: null,
   deepLink: null,          // 通知深链带来的 sessionId（#s=...）
   refreshTimer: null,
+  isViewer: false,         // 观众态（围观链接进入）：只读，无列表/操作/审批
+  viewerEnded: false,      // 围观终态（被踢/过期）：停止重连，显示"围观已结束"
+  replayMode: false,       // 回放模式（已结束会话从头读）：翻页方向由"加载更早"倒转为"继续加载"
+  replayDone: false,       // 回放已读到末条
+  replayLoading: false,
+  replayLastAt: 0,         // 客户端自限 ≥2s，与 daemon 的 viewer 频控对齐
 };
 
 function showBanner(text, onTap) {
@@ -1457,6 +1677,7 @@ function setCtx(info) {
 
 // 轮次结束后回填会话名（codex 首轮后才起名，"新会话"要变成真名）。防抖：快照回放只触发一次
 function refreshTitle() {
+  if (app.isViewer) return; // 观众无 sessions.list 权限；会话名来自 auth 的 sessionName
   if (app.titleTimer) clearTimeout(app.titleTimer);
   app.titleTimer = setTimeout(async () => {
     app.titleTimer = null;
@@ -1501,6 +1722,7 @@ function updateJump() {
 // —— 状态胶囊 + 分层连接诊断 ——
 // 胶囊只显示"最深的断层"；点开弹层看三层各自的状态与建议
 function updateStatusPill() {
+  if (app.viewerEnded) return; // 围观终态：pill 固定「已结束」，不被连接层状态覆盖
   const el = $("status");
   el.className = "";
   if (net.link === "connecting") {
@@ -1512,7 +1734,7 @@ function updateStatusPill() {
     el.textContent = "电脑离线";
     el.className = "down";
   } else if (net.engine === "down") {
-    el.textContent = "引擎重启中";
+    el.textContent = "Codex 重启中";
     el.className = "warn";
   } else if (net.daemon === true) {
     // 一切正常：副标题就是当前电脑名（对标官方 App 的 ● 机器名）
@@ -1575,15 +1797,16 @@ function renderDiag() {
     box.appendChild(diagRow("", `中继 ↔ ${pcName}`, "等待状态…"));
   }
 
-  // 3. Codex 引擎
+  // 3. Codex 主程序（电脑上真正跑对话的 Codex 程序）
   if (net.link !== "ok" || net.daemon !== true) {
-    box.appendChild(diagRow("", "Codex 引擎", "未知：电脑在线后可见"));
+    box.appendChild(diagRow("", "Codex 主程序", "未知：电脑在线后可见"));
   } else if (net.engine === "down") {
-    box.appendChild(diagRow("warn", "Codex 引擎", "异常退出，电脑端正在自动重启，稍候自动恢复"));
+    box.appendChild(diagRow("warn", "Codex 主程序", "已退出，电脑端正在自动重启，稍候自动恢复"));
   } else if (net.engine === "ok") {
-    box.appendChild(diagRow("ok", "Codex 引擎", "运行正常"));
+    box.appendChild(diagRow("ok", "Codex 主程序", "运行正常"));
   } else {
-    box.appendChild(diagRow("", "Codex 引擎", "未上报（电脑端 Remote 版本较旧）"));
+    // 已连上且鉴权成功，但电脑端 Remote 较旧、没带运行状态字段——程序其实在跑
+    box.appendChild(diagRow("ok", "Codex 主程序", "运行中（旧版电脑端未上报详细状态）"));
   }
 }
 
@@ -1753,6 +1976,27 @@ function updateThemeChecks() {
   $("ckthdark").textContent = t === "dark" ? "✓" : "";
 }
 
+// —— 字体两档：normal 常规（默认，不落存储）/ large 大号（头部有防闪烁的提前应用）——
+function getFontSize() {
+  return localStorage.getItem("czr-font") === "large" ? "large" : "normal";
+}
+
+function applyFontSize(mode) {
+  if (mode === "large") {
+    localStorage.setItem("czr-font", "large");
+    document.documentElement.dataset.font = "large";
+  } else {
+    localStorage.removeItem("czr-font");
+    delete document.documentElement.dataset.font;
+  }
+}
+
+function updateFontChecks() {
+  const f = getFontSize();
+  $("ckfsnormal").textContent = f === "normal" ? "✓" : "";
+  $("ckfslarge").textContent = f === "large" ? "✓" : "";
+}
+
 // "项目"只留真正的工作目录，其余算散聊天：
 // - 桌面版 Codex 给每个新聊天在 ~/Documents/Codex/<日期>/<聊天名> 建的托管目录
 //   （本机会话历史证实的布局），目录名就是聊天名（new-chat、hi…），不是用户的项目
@@ -1840,7 +2084,8 @@ async function openSession(id, title, opts = {}) {
   // 手机系统返回键/右滑返回走浏览器 history：从列表进会话时压一条历史，
   // 这样系统返回会触发 popstate 回首页，而不是把整个页面/PWA 弹掉。
   // 已在会话内（如右上角新建会话）不重复压栈——始终只留一条“会话→首页”的返回。
-  if (app.view !== "session") history.pushState({ czr: "session" }, "");
+  // 观众深链直进会话、无列表可回，不压栈（返回键走首页同款"再按一次退出"）。
+  if (app.view !== "session" && !app.isViewer) history.pushState({ czr: "session" }, "");
   app.view = "session";
   app.currentId = id;
   app.currentTitle = title;
@@ -1858,6 +2103,12 @@ async function openSession(id, title, opts = {}) {
   app.histTotal = 0;
   app.loadingEarlier = false;
   app.earlierAnchor = null;
+  app.replayMode = false;
+  app.replayDone = false;
+  app.replayLoading = false;
+  app.viewerCount = 0;
+  app.congestedShown = false;
+  updateReplayMore();
   resetPullTip();
   app.ctxPct = null; // 用量随本会话的 token_count 事件回填
   $("input").value = app.drafts.get(id) ?? ""; // 恢复本会话的未发送草稿
@@ -1872,7 +2123,7 @@ async function openSession(id, title, opts = {}) {
   $("list").classList.add("hidden");
   $("viewer").classList.add("active");
   $("composer").classList.add("active");
-  $("back").style.display = "flex";
+  if (!app.isViewer) $("back").style.display = "flex";
   setTitle(title);
   $("log").innerHTML = opts.fresh ? "" : '<div class="notice">加载中…</div>';
   setRunning(false);
@@ -1883,8 +2134,20 @@ async function openSession(id, title, opts = {}) {
   renderApprovals(); // 该会话的待审批卡从全局区移入对话流
   if (opts.fresh) return; // 空会话：暂不 watch，首条消息发出后由 dispatch 接入
   try {
-    await app.session.request("session.watch", { sessionId: id });
+    // 观众带 fromStart：已结束的会话从头顺序读（分享跑完的会话是主场景），
+    // 进行中的会话 daemon 会忽略之、回落尾部实时（mode:"tail"）。旧 daemon 无 mode 字段同理。
+    const r = await app.session.request("session.watch",
+      app.isViewer ? { sessionId: id, fromStart: true } : { sessionId: id });
+    if (r?.mode === "replay") {
+      app.replayMode = true;
+      if (typeof r.total === "number") app.histTotal = r.total;
+    }
   } catch (err) {
+    if (app.isViewer) {
+      $("log").innerHTML = "";
+      showViewerEnded("会话已不存在或暂不可用");
+      return;
+    }
     // 会话可能已被清理（深链/继续上次都可能指向失效 id）：报错并退回列表
     showBanner(`打开会话失败：${err.message}`);
     history.back(); // 消费掉刚压入的历史项，经 popstate 统一走 closeSession
@@ -1909,6 +2172,7 @@ async function closeSession() {
   app.echoes = [];
   app.toolNodes.clear();
   app.stream = null;
+  app.viewerCount = 0;
   setRunning(false);
   updateJump();
   document.body.classList.remove("insession");
@@ -1932,6 +2196,8 @@ function setRunning(running, driver = "daemon", startAt) {
   else if (running && startAt) app.runStart = Math.min(app.runStart, startAt);
   app.running = running;
   app.driver = running ? driver : null;
+  // 观众身份栏的运行脉冲：实时围观的核心反馈（观众端的 composer 卡整体隐藏）
+  if (app.isViewer) $("vrun").style.display = running ? "inline-flex" : "";
   const stoppable = running && driver === "daemon";
   // 运行中排队追加仍可用：输入为空时只显示停止 ■，写了内容 ↑ 才出现（updateSendState 统一管）
   $("stop").style.display = stoppable ? "block" : "none";
@@ -1966,10 +2232,12 @@ function fmtDur(ms) {
   return s < 60 ? `${s} 秒` : `${Math.floor(s / 60)} 分 ${String(s % 60).padStart(2, "0")} 秒`;
 }
 
-// 会话页状态条：等待审批 > 运行中（含耗时） > 隐藏
+// 会话页状态条：等待审批 > 运行中（含耗时） > 有人围观 > 隐藏
 function updateStatusStrip() {
   const el = $("sstatus");
   const hasApproval = [...app.approvals.values()].some((p) => p.sessionId === app.currentId);
+  // 分享者可见的围观人数（观众端在身份栏显示同场人数，不占状态条）
+  const watching = !app.isViewer && (app.viewerCount ?? 0) > 0 ? `${app.viewerCount} 人围观中` : "";
   if (hasApproval) {
     el.className = "appr";
     el.style.display = "block";
@@ -1979,7 +2247,12 @@ function updateStatusStrip() {
     el.style.display = "block";
     el.innerHTML = '<span class="pulse"></span>';
     const who = app.driver === "desktop" ? "桌面端正在运行" : "Codex 正在工作…";
-    el.appendChild(document.createTextNode(`${who} ${fmtDur(Date.now() - app.runStart)}`));
+    el.appendChild(document.createTextNode(
+      `${who} ${fmtDur(Date.now() - app.runStart)}${watching ? ` · ${watching}` : ""}`));
+  } else if (watching) {
+    el.className = "";
+    el.style.display = "block";
+    el.textContent = `👀 ${watching}`;
   } else {
     el.style.display = "none";
   }
@@ -2773,7 +3046,8 @@ function resolveApproval(approvalKey) {
 }
 
 function renderInto(items) {
-  const stick = nearBottom();
+  // 回放（从头读）：新内容追加在下方，读者自己往下滚，绝不替他跳到末尾
+  const stick = !app.replayMode && nearBottom();
   const frag = document.createDocumentFragment();
   for (const item of items) {
     // 轮次事件驱动运行状态（顺序处理，快照回放后落在正确的最终状态）
@@ -2925,12 +3199,57 @@ function loadEarlier() {
 function updateEarlierHint() {
   if (!hasEarlier() && !app.loadingEarlier) resetPullTip();
 }
+
+// —— 回放翻页（观众看已结束的会话）——
+// 阅读方向与"追直播"相反：从头往后读，底部哨兵进入视口即继续加载下一段，
+// 内容以 session.event 追加到末尾。客户端自限 ≥2s，与 daemon 的 viewer 频控对齐。
+function updateReplayMore() {
+  const el = $("replaymore");
+  el.classList.toggle("show", app.replayMode && !app.replayDone);
+  el.textContent = "继续加载…";
+}
+async function loadReplayMore() {
+  if (!app.replayMode || app.replayDone || app.replayLoading || !app.session) return;
+  const wait = 2000 - (Date.now() - app.replayLastAt);
+  if (wait > 0) {
+    clearTimeout(app.replayRetry);
+    app.replayRetry = setTimeout(loadReplayMore, wait + 50);
+    return;
+  }
+  app.replayLastAt = Date.now();
+  app.replayLoading = true;
+  try {
+    const r = await app.session.request("session.more", { limit: 200 });
+    if (typeof r?.total === "number") app.histTotal = r.total;
+    if (r?.done) app.replayDone = true;
+  } catch {
+    // 频控/瞬断：哨兵仍在，滚动触达时自然重试
+  } finally {
+    app.replayLoading = false;
+    updateReplayMore();
+    // 哨兵仍在视口内（短会话/大屏）：继续拉，直到读完或哨兵滚出视口
+    if (app.replayMode && !app.replayDone && replaySentinelVisible) {
+      clearTimeout(app.replayRetry);
+      app.replayRetry = setTimeout(loadReplayMore, 2100);
+    }
+  }
+}
+let replaySentinelVisible = false;
+function bindReplaySentinel() {
+  const io = new IntersectionObserver((entries) => {
+    replaySentinelVisible = entries.some((e) => e.isIntersecting);
+    if (replaySentinelVisible) loadReplayMore();
+  });
+  io.observe($("replaymore"));
+}
+
 // 触摸下拉手势：仅在会话顶部起手，下拉过阈值松手即加载更早
 function bindPullToLoad() {
   const viewer = $("viewer");
   let pull = null;
   viewer.addEventListener("touchstart", (e) => {
-    if (app.view !== "session" || app.loadingEarlier || window.scrollY > 0) { pull = null; return; }
+    // 回放模式从头读起，没有"更早"可加载（翻页在底部哨兵）
+    if (app.view !== "session" || app.replayMode || app.loadingEarlier || window.scrollY > 0) { pull = null; return; }
     pull = { startY: e.touches[0].clientY, ready: false };
   }, { passive: true });
   viewer.addEventListener("touchmove", (e) => {
@@ -3000,29 +3319,76 @@ function handleNotify(msg) {
         '例如："把 README 里的安装说明补全"。</div>';
     }
     // 加载更早触发的快照：不落底，等分片到齐后把滚动锚回原处；否则（首屏/重连）落底
+    // 回放模式（从头读）：首屏就是开头，停在顶部开始阅读，不落底
     if (app.loadingEarlier) scheduleEarlierSettle();
+    else if (app.replayMode) window.scrollTo(0, 0);
     else scrollToBottom();
     updateEarlierHint();
+    updateReplayMore();
   } else if (msg.method === "session.event" && msg.params.sessionId === app.currentId) {
     renderInto(msg.params.items);
     if (app.loadingEarlier) scheduleEarlierSettle(); // 快照余下分片，继续等到齐
   } else if (msg.method === "session.live" && msg.params.sessionId === app.currentId) {
     onLive(msg.params.event, msg.params.params);
   } else if (msg.method === "approval.request") {
+    if (app.isViewer) return; // 第二道保险：旧 daemon 可能没过滤，观众端不渲染审批
     showApproval(msg.params); // 全局：任何页面都显示
   } else if (msg.method === "approval.resolved") {
+    if (app.isViewer) return;
     resolveApproval(msg.params.approvalKey); // 其他设备处理后同步消失
   } else if (msg.method === "board.changed") {
+    if (app.isViewer) return; // 携带其他会话状态；观众运行态走 live/tail
     scheduleListRefresh(); // 列表状态随运行/审批变化刷新
     // 当前会话的 daemon 驱动状态以看板为准（覆盖 tail 推断）
     if (msg.params?.sessionId === app.currentId && app.view === "session") {
       if (msg.params.running) setRunning(true, "daemon");
       else if (app.driver === "daemon") setRunning(false);
     }
+  } else if (msg.method === "viewer.count") {
+    if (msg.params?.sessionId !== app.currentId) return;
+    app.viewerCount = msg.params.count ?? 0;
+    if (app.isViewer) {
+      // 事件感的一半来自同伴在场（count 含自己）
+      const others = Math.max(0, app.viewerCount - 1);
+      $("vcount").textContent = others > 0 ? `同场 ${others} 人` : "";
+    } else {
+      updateStatusStrip(); // "N 人围观中"——声望感需要被分享者看见
+      if (msg.params.congested && !app.congestedShown) {
+        app.congestedShown = true;
+        showBanner("围观人数较多，已优先保障你的操作", () => showBanner(""));
+      } else if (!msg.params.congested && app.congestedShown) {
+        app.congestedShown = false;
+        showBanner("");
+      }
+    }
+  } else if (msg.method === "share.reaction") {
+    if (msg.params?.sessionId === app.currentId) floatReaction(msg.params.emoji, msg.params.count);
+  } else if (msg.method === "share.summary") {
+    if (app.isViewer) return;
+    const p = msg.params ?? {};
+    showBanner(`围观战报：${p.visitors} 人来过，峰值 ${p.peak} 人在线，${p.reactions} 次喝彩`,
+      () => showBanner(""));
   } else if (msg.method === "daemon.status") {
     net.engine = msg.params?.engine ?? null; // 引擎掉线/恢复（分层诊断）
     updateStatusPill();
   }
+}
+
+// 喝彩飘浮：双端同款，锚在底栏上方随机横移，动画完自清
+function floatReaction(emoji, count) {
+  if (app.view !== "session") return;
+  const el = document.createElement("span");
+  el.className = "vfloat";
+  el.textContent = emoji;
+  if (count > 1) {
+    const n = document.createElement("span");
+    n.className = "vn";
+    n.textContent = `×${count}`;
+    el.appendChild(n);
+  }
+  el.style.left = `${Math.round(20 + Math.random() * 60)}%`;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 1700);
 }
 
 function autoGrow() {
@@ -3117,6 +3483,44 @@ async function switchDaemon(id) {
   startSession(info);
 }
 
+// 围观终态（被踢/链接过期/会话不存在）：中性文案，不渲染成报错；
+// 身份栏与获客入口保留——被踢的瞬间恰是转化时机。
+function showViewerEnded(reason) {
+  if (app.viewerEnded) return; // 终态只进一次：watch 失败路径重连会反复到这里，防卡片堆叠
+  app.viewerEnded = true;
+  // 真终态：停掉连接层。被踢/403 路径 session 已 dead，但 watch 失败（会话
+  // 404/超时）时连接还活着，不关掉就会无限重连、反复触发本函数
+  if (app.session) {
+    app.session.closedByUser = true;
+    try { app.session.ws?.close(); } catch {}
+  }
+  // 打开已撤销/过期链接时鉴权失败发生在进会话视图之前（view 还是 list，
+  // 显示「正在打开围观…」）：把壳切到会话区，终态卡与获客入口才看得见
+  if (app.isViewer && app.view !== "session") {
+    app.view = "session";
+    $("list").classList.add("hidden");
+    $("viewer").classList.add("active");
+    $("composer").classList.add("active"); // 身份栏（获客入口）在 composer 里
+    document.body.classList.add("insession");
+  }
+  app.replayMode = false;
+  updateReplayMore();
+  setRunning(false);
+  try { sessionStorage.removeItem("czr-viewer"); } catch {}
+  $("sstatus").style.display = "none";
+  const card = document.createElement("div");
+  card.className = "vend";
+  const t = document.createElement("div");
+  t.className = "vtitle";
+  t.textContent = "围观已结束";
+  const sub = document.createElement("div");
+  sub.textContent = reason || "分享者已收回链接，或链接已到期。";
+  card.append(t, sub);
+  $("log").appendChild(card);
+  $("status").textContent = "已结束";
+  $("status").className = "";
+}
+
 // 令牌被电脑端撤销/失效（403）：终态。这台的设备令牌永远失效，清掉死记录，
 // 有其它已配对电脑就切过去，否则回到未配对引导——而不是无限「重连中…」
 function handleRevoked(info, err) {
@@ -3143,6 +3547,13 @@ function startSession(info) {
   // 标题固定，电脑名走副标题（updateStatusPill）；未配对态没有底栏/菜单
   if (app.view === "list") setTitle("C叉叉");
   document.body.classList.add("paired");
+  // 观众态：同一套页面按角色收掉操作性镶边（CSS body.viewer 作用域）
+  app.isViewer = !!info.viewer;
+  document.body.classList.toggle("viewer", app.isViewer);
+  if (app.isViewer) {
+    setTitle(info.sname || "围观");
+    $("list").innerHTML = '<div class="notice">正在打开围观…</div>';
+  }
   updateChevron();
   const session = new Session(info);
   app.session = session;
@@ -3152,13 +3563,42 @@ function startSession(info) {
     updateStatusPill();
   };
   session.onNotify = handleNotify;
-  session.onAuthFail = (err) => handleRevoked(session.info, err);
+  // 观众的 403 不是"设备被移除"：进入"围观已结束"终态，不动 czr-daemons
+  session.onAuthFail = (err) => {
+    if (info.viewer) showViewerEnded();
+    else handleRevoked(session.info, err);
+  };
   session.onReady = async (auth) => {
     net.link = "ok";
     net.engine = auth?.engine ?? null;
     updateStatusPill();
     showBanner("");
     updateChevron();
+    if (info.viewer) {
+      // 观众无看板：鉴权即直进会话只读视图（会话 id/名以 daemon 为准，链接字段仅兜底）
+      const sid = auth?.scope?.sessionId || info.sid;
+      const name = auth?.sessionName || info.sname || "围观";
+      if (!sid) { showViewerEnded("链接不完整，请向分享者重新索取。"); return; }
+      try {
+        if (app.view === "session" && app.currentId === sid) {
+          // 重连恢复：重新 watch（回放态会从头重发首屏，v1 接受）。
+          // 回放进度一并归零——daemon 端 offset 已重置，旧的 replayDone
+          // 不清会把加载哨兵藏掉，观众永远翻不过首屏
+          app.replayDone = false;
+          app.replayLoading = false;
+          app.replayLastAt = 0;
+          const r = await session.request("session.watch", { sessionId: sid, fromStart: true });
+          app.replayMode = r?.mode === "replay";
+          if (typeof r?.total === "number") app.histTotal = r.total;
+          updateReplayMore();
+        } else {
+          await openSession(sid, name, { viewer: true });
+        }
+      } catch {
+        showViewerEnded("会话已不存在或暂不可用");
+      }
+      return;
+    }
     prefetchModels(); // 静默：给模型胶囊补上电脑端默认模型号
     try {
       if (app.view === "session" && app.currentId) {
@@ -3178,6 +3618,163 @@ function startSession(info) {
     }
   };
   session.start().catch((err) => showBanner(`连接失败：${err.message}`));
+}
+
+// —— 分享围观（创作者侧）——
+// 决策：先展示该会话已存在的链接（时效/在线观众/复制/撤销），"再生成一条"是显式动作，
+// 打开弹窗绝不铸造令牌。丑话前置：只读 ≠ 无害，脱敏责任在分享者。
+const SHARE_WARN = "围观者可以看到本会话的全部内容——代码、命令与输出。";
+
+function fmtExpiry(expiresAt) {
+  if (!expiresAt) return "永久";
+  const left = expiresAt - Date.now();
+  if (left <= 0) return "已过期";
+  const h = Math.floor(left / 3600_000);
+  return h >= 1 ? `剩余 ${h} 小时` : `剩余 ${Math.max(1, Math.floor(left / 60_000))} 分钟`;
+}
+
+async function openShareSheet() {
+  if (!app.currentId || app.isViewer) return;
+  $("sharesheet").classList.add("open");
+  const box = $("sharelist");
+  box.innerHTML = '<div class="notice">加载中…</div>';
+  try {
+    const { links } = await app.session.request("share.list", { sessionId: app.currentId });
+    renderShareSheet(links ?? []);
+  } catch (err) {
+    box.innerHTML = "";
+    const note = document.createElement("div");
+    note.className = "sheetnote";
+    note.textContent = /未知方法/.test(err.message)
+      ? "电脑端 Remote 版本较旧，尚不支持围观分享。请先更新电脑端 Codex-叉叉。"
+      : `加载失败：${err.message}`;
+    box.appendChild(note);
+  }
+}
+
+function renderShareSheet(links, freshUrl) {
+  const box = $("sharelist");
+  box.innerHTML = "";
+  const warn = document.createElement("div");
+  warn.className = "sharewarn";
+  warn.textContent = SHARE_WARN;
+  box.appendChild(warn);
+
+  for (const link of links) {
+    const row = document.createElement("div");
+    row.className = "sharerow";
+    const main = document.createElement("div");
+    main.className = "smain";
+    const name = document.createElement("div");
+    name.className = "sname";
+    name.textContent = `围观链接（只读 · ${fmtExpiry(link.expiresAt)}）`;
+    const sub = document.createElement("div");
+    sub.className = "ssub";
+    sub.textContent = link.viewers > 0 ? `${link.viewers} 人正在围观` : "暂无人围观";
+    main.append(name, sub);
+    row.appendChild(main);
+    if (link.url) {
+      const copy = document.createElement("button");
+      copy.textContent = "复制";
+      copy.onclick = async () => {
+        showToast((await copyText(link.url)) ? "围观链接已复制" : "复制失败，请长按链接手动复制");
+      };
+      row.appendChild(copy);
+    }
+    // 按链接静音全部互动（喝彩等）：防打扰是底线
+    const mute = document.createElement("button");
+    mute.textContent = link.muted ? "已静音" : "静音互动";
+    mute.onclick = async () => {
+      try {
+        await app.session.request("share.mute", { deviceId: link.deviceId, muted: !link.muted });
+        openShareSheet();
+      } catch (err) {
+        showBanner(`设置失败：${err.message}`);
+      }
+    };
+    row.appendChild(mute);
+    const revoke = document.createElement("button");
+    revoke.className = "srevoke";
+    revoke.textContent = "撤销";
+    revoke.onclick = async () => {
+      if (!confirm("撤销这条围观链接？所有正在围观的人会立即断开。")) return;
+      try {
+        await app.session.request("share.revoke", { deviceId: link.deviceId });
+        showToast("已撤销");
+        openShareSheet(); // 重拉列表
+      } catch (err) {
+        showBanner(`撤销失败：${err.message}`);
+      }
+    };
+    row.appendChild(revoke);
+    box.appendChild(row);
+  }
+
+  // 显式生成：ttl 两档（24 小时 / 永久），生成后结果区提供复制 / 系统分享 / 二维码
+  const gen = document.createElement("div");
+  gen.className = "sharegen";
+  for (const [label, ttl] of [["生成 24 小时链接", "24h"], ["生成永久链接", null]]) {
+    const b = document.createElement("button");
+    b.textContent = links.length ? `再${label}` : label;
+    b.onclick = async () => {
+      b.disabled = true;
+      try {
+        const r = await app.session.request("share.create", { sessionId: app.currentId, ttl });
+        const { links: fresh } = await app.session.request("share.list", { sessionId: app.currentId });
+        renderShareSheet(fresh ?? [], r.url);
+      } catch (err) {
+        showBanner(`生成失败：${err.message}`);
+        b.disabled = false;
+      }
+    };
+    gen.appendChild(b);
+  }
+  box.appendChild(gen);
+
+  if (freshUrl) {
+    const acts = document.createElement("div");
+    acts.className = "sharegen";
+    const copy = document.createElement("button");
+    copy.textContent = "复制围观链接";
+    copy.onclick = async () => {
+      showToast((await copyText(freshUrl)) ? "围观链接已复制，去群里贴上吧" : "复制失败");
+    };
+    acts.appendChild(copy);
+    if (navigator.share) {
+      const sys = document.createElement("button");
+      sys.textContent = "分享…";
+      sys.onclick = () => navigator.share({ title: "围观我的 Codex 会话", url: freshUrl }).catch(() => {});
+      acts.appendChild(sys);
+    }
+    box.appendChild(acts);
+    // 二维码本地生成（链接含只读令牌，绝不可经第三方服务）；扫不动时复制链接是主路径
+    try {
+      const qr = qrcode(0, "L");
+      qr.addData(freshUrl, "Byte");
+      qr.make();
+      const n = qr.getModuleCount();
+      const scale = Math.max(2, Math.floor(240 / n));
+      const canvas = document.createElement("canvas");
+      canvas.id = "shareqr";
+      canvas.width = canvas.height = n * scale;
+      const ctx = canvas.getContext("2d");
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = "#000";
+      for (let r = 0; r < n; r++) {
+        for (let c = 0; c < n; c++) {
+          if (qr.isDark(r, c)) ctx.fillRect(c * scale, r * scale, scale, scale);
+        }
+      }
+      box.appendChild(canvas);
+    } catch {
+      // 载荷超出二维码容量等罕见情形：复制路径仍可用
+    }
+    const tip = document.createElement("div");
+    tip.className = "sheetnote";
+    tip.textContent = "任何拿到链接的人点开即可围观（只读）。可随时在此撤销。";
+    box.appendChild(tip);
+  }
 }
 
 // 快捷回复：覆盖手机上最常见的三种指示，点选即发，免打字（仅空闲时显示）
@@ -3212,7 +3809,8 @@ async function main() {
   //  · 会话内 → 回首页（会话历史项已被弹出，栈里仍留首页哨兵）；
   //  · 首页 → 拦一次并提示，1.6s 内再按一次才真正退出（防误触）。
   window.addEventListener("popstate", () => {
-    if (app.view === "session") { closeSession().catch(() => {}); return; }
+    // 观众无列表可回：返回键与首页同款"再按一次退出"
+    if (app.view === "session" && !app.isViewer) { closeSession().catch(() => {}); return; }
     if (app.backExit) { history.back(); return; } // 第二次：不再压回，放行退出
     history.pushState({ czr: "home" }, ""); // 第一次：压回哨兵，停留在首页
     app.backExit = true;
@@ -3221,6 +3819,7 @@ async function main() {
     app.backExitTimer = setTimeout(() => { app.backExit = false; }, 1600);
   });
   bindPullToLoad(); // 会话顶部下拉加载更早历史
+  bindReplaySentinel(); // 回放模式的底部继续加载哨兵
   $("send").onclick = sendMessage;
   $("stop").onclick = stopTurn;
   $("input").addEventListener("input", () => { autoGrow(); updateSendState(); });
@@ -3297,7 +3896,41 @@ async function main() {
     app.filter = $("search").value;
     renderList(app.lastSessions);
   });
-  $("hmid").onclick = openSheet;
+  $("hmid").onclick = () => { if (!app.isViewer) openSheet(); }; // 观众不进"切换电脑"（切进去出不来）
+  $("sharebtn").onclick = openShareSheet;
+  $("sharesheet").onclick = (e) => { if (e.target === $("sharesheet")) $("sharesheet").classList.remove("open"); };
+  // 观众喝彩：枚举表情，前端 300ms 防抖（服务端另有令牌桶）；渲染靠广播回流，双端一致
+  const EMOJI = ["👏", "🔥", "❤️", "😂", "🤯"];
+  for (const emoji of EMOJI) {
+    const b = document.createElement("button");
+    b.textContent = emoji;
+    b.onclick = () => {
+      const now = Date.now();
+      if (now - (app.lastReactAt ?? 0) < 300) return;
+      app.lastReactAt = now;
+      app.session?.request("share.react", { emoji }).catch(() => {});
+    };
+    $("vreact").appendChild(b);
+  }
+  // 转发围观：复制同一条链接（链接自我裂变，每一跳都不需要回到创作者）
+  $("vshare").onclick = async () => {
+    let raw = null;
+    try { raw = JSON.parse(sessionStorage.getItem("czr-viewer") || "null")?.raw; } catch {}
+    if (!raw) { showToast("链接不可用，请回到聊天里转发原链接"); return; }
+    const url = `${location.origin}${location.pathname}#d=${raw}`;
+    if (navigator.share) {
+      navigator.share({ title: "围观一场 Codex 会话", url }).catch(() => {});
+    } else {
+      showToast((await copyText(url)) ? "围观链接已复制" : "复制失败");
+    }
+  };
+  // 一键复制 prompt：观众学的核心就是"他是怎么跟 agent 说话的"（纯前端）
+  $("log").addEventListener("click", async (e) => {
+    if (!app.isViewer) return;
+    const bubble = e.target.closest(".msg.user .bubble");
+    if (!bubble) return;
+    showToast((await copyText(bubble.textContent)) ? "已复制这条 prompt" : "复制失败");
+  });
   $("newchat").onclick = newSession;
   // ⋯ 菜单：组织方式切换 + 外观 + 管理入口
   applyTheme(getTheme()); // 补齐 meta theme-color（变量层已在头部脚本提前生效）
@@ -3305,6 +3938,7 @@ async function main() {
     e.stopPropagation();
     updateOrganizeChecks();
     updateThemeChecks();
+    updateFontChecks();
     $("topmenu").classList.toggle("open");
   };
   // 会话视图右上角「新建会话」：复用首页项目头的同款 COMPOSE 图标，在当前会话同目录直接开新会话
@@ -3327,6 +3961,8 @@ async function main() {
       renderList(app.lastSessions);
     } else if (act === "th-auto" || act === "th-light" || act === "th-dark") {
       applyTheme(act.slice(3));
+    } else if (act === "fs-normal" || act === "fs-large") {
+      applyFontSize(act.slice(3));
     } else if (act === "pc") {
       openSheet();
     } else if (act === "diag") {

@@ -23,6 +23,24 @@ export function parseJsonlChunk(text) {
   return { items, rest };
 }
 
+// 一次性按条目窗口读取 rollout（offset/limit 为条目序号，非字节）。
+// 观众回放"从头读"的数据源：首屏 [0,200)，随后向前翻页。返回 { items, total }。
+export async function readRolloutWindow(path, offset, limit) {
+  const handle = await open(path, "r");
+  try {
+    const info = await handle.stat();
+    if (info.size === 0) return { items: [], total: 0 };
+    const buffer = Buffer.alloc(info.size);
+    await handle.read(buffer, 0, info.size, 0);
+    const { items } = parseJsonlChunk(buffer.toString("utf8"));
+    const start = Math.max(0, offset | 0);
+    const n = Math.max(0, limit | 0);
+    return { items: items.slice(start, start + n), total: items.length };
+  } finally {
+    await handle.close();
+  }
+}
+
 export class RolloutTail {
   #path;
   #onItems;

@@ -59,10 +59,13 @@ JSON-RPC 风格：请求 `{"id",method,"params"}`，响应 `{"id","result"| "err
 
 成功：`{"id":1,"result":{"deviceId":"...","deviceToken":"...","daemonName":"...","protocol":1,"engine":"ok"|"down"}}`（配对路径签发新 deviceToken；deviceToken 路径原样确认；`engine` 为 codex app-server 的当前状态，旧 daemon 不发此字段）。失败：error 后 daemon 发 `{"t":"close"}` 断开。
 
+**围观（只读）设备**的成功响应额外携带 `role:"viewer"`、`scope:{sessionId}`、`sessionName`（见 §3.8）——观众端据此跳过看板直进会话只读视图。全权设备缺省这些字段，旧客户端忽略即可。
+
 双方在 auth 交换应用协议版本（见 §5）。client 若发现 daemon 的 `protocol` 更高，提示用户刷新页面（PWA 拉取新代码）。
 
 - pairToken：一次性、5 分钟时效，由 `pair` 命令生成；daemon 只存哈希。
-- deviceToken：32 字节随机 base64url，daemon 只存 SHA-256 哈希与设备元数据（名称、创建时间、最后活跃）。
+- deviceToken：32 字节随机 base64url，daemon 只存 SHA-256 哈希与设备元数据（名称、创建时间、最后活跃）。围观设备条目另存 `role/scope/expiresAt/sessionName/muted`，以及明文 `url`（分享弹窗需要对已有链接提供"复制"；该令牌仅授权单会话只读，能读配置文件者本就能读全部会话，静态明文不引入新风险）。
+- 过期（`expiresAt` 已过）与被撤销的令牌鉴权一律 403；对已在线连接，daemon 经配置文件监听与定时核对**主动踢断**（撤销/限时即时生效，不等下次鉴权）。
 
 ### 3.2 会话查看
 
@@ -74,13 +77,19 @@ JSON-RPC 风格：请求 `{"id",method,"params"}`，响应 `{"id","result"| "err
 //   "approvals"  // 待决审批数
 // }]}
 
-{"id":3,"method":"session.watch","params":{"sessionId":"..."}}
-// result: {"ok":true}；随后：
-//   {"method":"session.snapshot","params":{"sessionId","items":[...]}}   // 尾部回填
+{"id":3,"method":"session.watch","params":{"sessionId":"...","fromStart":true}}
+// result: {"ok":true,"mode":"tail"|"replay","total"?}；随后：
+//   {"method":"session.snapshot","params":{"sessionId","items":[...]}}   // 尾部回填（回放模式为头部首屏）
 //   {"method":"session.event","params":{"sessionId","items":[...]}}      // 增量追加
 //   {"method":"session.live","params":{"sessionId","event","params"}}    // app-server 实时事件
 {"id":4,"method":"session.unwatch","params":{}}
 ```
+
+`fromStart` 可选（观众回放用）：会话**已结束**（非运行且文件近 60s 无写入）时进入回放模式
+（`mode:"replay"`）——首屏为开头 200 条、`total` 为全量条数，随后 `session.more` 语义变为
+**向后翻页**（从上次位置继续读，`session.event` 追加，result 带 `total/done`）。会话在跑时
+忽略 fromStart 回落尾部实时（`mode:"tail"`）。旧 daemon 忽略此参数且不发 `mode` 字段，
+客户端按尾部模式处理即可（劣化但可用）。已知边界：回放中会话复活不自动转直播。
 
 `items` 为 rollout JSONL 行解析后的对象（`{timestamp,type,payload}`），client 侧按类型渲染，未知类型显示摘要。每 client 连接同一时刻只 watch 一个会话。
 
@@ -167,6 +176,73 @@ codex app-server 崩溃/恢复时（daemon 会自动重拉），daemon 向所有
 ### 3.5 心跳
 
 client 可发 `{"method":"ping"}`，daemon 回 `{"method":"pong"}`（信封内，兼作链路探活）。
+
+### 3.8 围观：单会话只读链接（r1.1）
+
+产品语义见 `docs/PRD-remote.md`「增补：会话分享与围观」。协议要点：
+
+**权限模型（服务端强制是唯一安全边界，前端隐藏不承担安全职责）**——两个维度同时收口：
+
+- **方法级，默认拒绝**：`role:"viewer"` 的连接仅放行 `ping`、`session.watch`（仅限
+  `scope.sessionId`，越界 403；每连接频控 ≥2s，超限 429——fromStart 每次都是整文件读，
+  与 `session.more` 同为读放大入口）、`session.unwatch`、`session.more`（每连接频控 ≥2s，超限 429）、
+  `image.fetch`（仅限本会话抽出的图片，越界 403）、`share.react`。其余方法（含未来新增）一律 403。
+- **数据级，推送过滤**：`approval.request/resolved`（补发与实时两条路径）与 `board.changed`
+  不向观众发送；图片缓存条目记录来源会话集合（内容哈希去重，同图可属多会话）。
+
+**铸造与管理（仅全权设备可调；观众被白名单挡在门外）**：
+
+```json
+{"id":20,"method":"share.create","params":{"sessionId":"...","ttl":"24h"|null}}
+// 签发单会话只读令牌并生成围观链接。ttl null 为永久。result: {"url":"...","deviceId":"..."}
+
+{"id":21,"method":"share.revoke","params":{"deviceId":"..."}}
+// 仅可撤销 role:"viewer" 条目（全权设备撤销走桌面设备页，协议面不扩权）。
+// 撤销即删条目并立即断开该链接的全部在线连接。result: {"ok":true}
+
+{"id":22,"method":"share.list","params":{"sessionId":"..."}}
+// 分享弹窗数据源：该会话现存的围观链接。
+// result: {"links":[{"deviceId","url","createdAt","expiresAt","muted","viewers"}]}
+```
+
+**围观链接载荷**沿用 `#d=` 机制（见 §4），追加仅供观众端 UI 的显示提示字段：
+`ro:1`（只读标记）、`sid`（会话 id）、`sname`（会话名，截断 ≤20 字）。
+**权限判定一律以 daemon 端设备条目为准，链接内字段仅是显示提示。**
+
+**围观层互动**（观众输入只进 daemon 自己的通知广播，与 rollout/turn 完全不同路，
+**绝不进入会话与 agent 上下文**；所有互动可被创作者按链接静音）：
+
+```json
+{"id":23,"method":"share.react","params":{"emoji":"👏"}}
+// 喝彩。表情枚举（👏🔥❤️😂🤯），枚举外 400；每连接令牌桶（突发 5、平均 2/s）超限 429。
+// 观众的 sessionId 取自 scope；全权设备需带 params.sessionId。静音链接的 react 返回
+// {ok:true} 但静默丢弃（不给刷子反馈面）。daemon 按会话×表情做 1s 合并窗口后广播：
+{"method":"share.reaction","params":{"sessionId","emoji","count"}}
+// -> 该会话观众 + 全部全权设备。计数为窗口内合并值，内存态、不持久化。
+
+{"id":24,"method":"share.mute","params":{"deviceId":"...","muted":true}}
+// 仅全权：按链接静音全部互动（防打扰是底线）。result: {"ok":true}
+
+{"method":"viewer.count","params":{"sessionId","count","congested"?}}
+// 观众进出时防抖广播（500ms）。观众收 {sessionId,count}（"同场 N 人"）；
+// 全权额外收 congested：观众帧持续积压 >3s 置真、恢复置假，翻转时补发。
+
+{"method":"share.summary","params":{"sessionId","deviceId","visitors","peak","reactions"}}
+// 围观战报：链接撤销/过期时发给全权设备（visitors 累计到访、peak 并发峰值、
+// reactions 喝彩数）。撤销/到期时观众已离线也会补发（设备表核对时对账）。
+// 内存态，daemon 重启即清；没人来过的链接不发。
+```
+
+预留（v1.x，仅全权可调）：`share.say`（创作者对观众广播旁白，渲染为与会话内容
+视觉区隔的气泡；瞬时消息，不持久化）。
+
+**规模与稳态**：观众人数不设产品上限。daemon 侧观众通知帧走低优先级发送队列（按 relay
+上行水位排空，饱和时延迟/丢弃观众帧：尾部模式经快照追平，回放模式从丢弃点按序补发、
+无重无漏）——审批与全权设备帧永远先行。
+熔断背板：单会话并发观众按 `scope.sessionId` 聚合（跨该会话全部链接），超过
+`viewerLimit`（默认 100，可配置）时新观众鉴权 403，文案诚实说明原因；仅防病态场景。
+
+旧缓存 PWA 打开围观链接：会渲染完整操作 UI，但一切越权调用被 daemon 拒绝——劣化但安全。
 
 ## 4. 配对码
 

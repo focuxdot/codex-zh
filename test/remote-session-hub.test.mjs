@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { setTimeout as delay } from "node:timers/promises";
 
 import { SessionHub } from "../remote/daemon/src/session-hub.mjs";
 
@@ -25,12 +26,20 @@ function mockAppServer() {
 }
 
 function mockClient() {
-  return { live: [], approvals: [], resolved: [], board: [],
+  return { live: [], approvals: [], resolved: [], board: [], reactions: [], counts: [], summaries: [],
     pushLiveEvent(sessionId, method, params) { this.live.push({ sessionId, method, params }); },
     pushApproval(key, sessionId, method, params) { this.approvals.push({ key, sessionId, method, params }); },
     pushApprovalResolved(key) { this.resolved.push(key); },
     pushBoardChanged(payload) { this.board.push(payload); },
+    pushShareReaction(payload) { this.reactions.push(payload); },
+    pushViewerCount(payload) { this.counts.push(payload); },
+    pushShareSummary(payload) { this.summaries.push(payload); },
   };
+}
+
+// 观众连接：isViewer + 单会话 scope（形状同 ClientSession 的 getter）
+function mockViewer(sessionId, deviceId) {
+  return { ...mockClient(), isViewer: true, scopeSessionId: sessionId, deviceId, congestedSince: 0 };
 }
 
 test("发消息：首次 resume + turn/start，重复发不再 resume", async () => {
@@ -128,6 +137,160 @@ test("client 断开后不再收到事件与审批", async () => {
   server.emitServerRequest(1, "execCommandApproval", { threadId: "thr-1" });
   assert.equal(client.live.length, 0);
   assert.equal(client.approvals.length, 0);
+});
+
+test("数据级过滤：审批（补发+实时+resolved）与 board.changed 不达观众", () => {
+  const server = mockAppServer();
+  const hub = new SessionHub(server);
+  // 待决审批存在时观众上线：不补发
+  server.emitServerRequest(1, "execCommandApproval", { threadId: "thr-1", command: ["ls"] });
+  const viewer = mockViewer("thr-1");
+  const full = mockClient();
+  hub.registerClient(viewer);
+  hub.registerClient(full);
+  assert.equal(viewer.approvals.length, 0, "观众不补收待决审批");
+  assert.equal(full.approvals.length, 1, "全权设备补收");
+  // 实时审批广播：观众收不到
+  server.emitServerRequest(2, "execCommandApproval", { threadId: "thr-1", command: ["rm"] });
+  assert.equal(viewer.approvals.length, 0);
+  assert.equal(full.approvals.length, 2);
+  // 决策后 resolved 与 board.changed 同样不达观众
+  hub.respondApproval(full.approvals[1].key, "accept");
+  assert.equal(viewer.resolved.length, 0);
+  assert.equal(full.resolved.length, 1);
+  assert.equal(viewer.board.length, 0, "board.changed 携带其他会话状态，不发观众");
+  assert.ok(full.board.length > 0);
+});
+
+test("观众订阅会话后仍收到实时流事件（阅读本体不受过滤影响）", () => {
+  const server = mockAppServer();
+  const hub = new SessionHub(server);
+  const viewer = mockViewer("thr-1");
+  hub.registerClient(viewer);
+  hub.subscribe("thr-1", viewer);
+  server.emitNotification("turn/started", { threadId: "thr-1", turn: { id: "t1" } });
+  assert.equal(viewer.live.length, 1);
+});
+
+test("viewerCount：按 scope.sessionId 聚合（跨链接），全权设备不计入", () => {
+  const server = mockAppServer();
+  const hub = new SessionHub(server);
+  hub.registerClient(mockViewer("thr-1"));
+  hub.registerClient(mockViewer("thr-1")); // 同会话另一条围观链接的观众
+  hub.registerClient(mockViewer("thr-2"));
+  hub.registerClient(mockClient());
+  assert.equal(hub.viewerCount("thr-1"), 2);
+  assert.equal(hub.viewerCount("thr-2"), 1);
+  assert.equal(hub.viewerCount("thr-9"), 0);
+  assert.equal(hub.viewerCount(undefined), 0);
+  const gone = mockViewer("thr-1");
+  hub.registerClient(gone);
+  hub.removeClient(gone);
+  assert.equal(hub.viewerCount("thr-1"), 2);
+});
+
+test("喝彩聚合：窗口内合并计数，只达该会话的观众面", async () => {
+  const server = mockAppServer();
+  const hub = new SessionHub(server, { reactionWindowMs: 10 });
+  const full = mockClient();
+  const v1 = mockViewer("thr-1", "dv1");
+  const v2 = mockViewer("thr-2", "dv2");
+  hub.registerClient(full);
+  hub.registerClient(v1);
+  hub.registerClient(v2);
+  hub.addReaction("thr-1", "👏", "dv1");
+  hub.addReaction("thr-1", "👏", "dv1");
+  hub.addReaction("thr-1", "🔥", "dv1");
+  await delay(60);
+  const claps = full.reactions.find((r) => r.emoji === "👏");
+  assert.equal(claps.count, 2, "窗口内合并计数");
+  assert.equal(claps.sessionId, "thr-1");
+  assert.equal(full.reactions.find((r) => r.emoji === "🔥").count, 1);
+  assert.equal(v1.reactions.length, 2, "同会话观众收到");
+  assert.equal(v2.reactions.length, 0, "其他会话的观众收不到");
+});
+
+test("viewer.count 防抖广播：观众收 count，congested 字段仅发全权", async () => {
+  const server = mockAppServer();
+  const hub = new SessionHub(server, { viewerCountDebounceMs: 10 });
+  const full = mockClient();
+  hub.registerClient(full);
+  const a = mockViewer("thr-1", "dv1");
+  const b = mockViewer("thr-1", "dv1"); // 同一条链接的第二个观众
+  hub.registerClient(a);
+  hub.registerClient(b);
+  await delay(60);
+  const last = full.counts.at(-1);
+  assert.equal(last.sessionId, "thr-1");
+  assert.equal(last.count, 2);
+  assert.equal(last.congested, false, "全权带 congested 字段");
+  assert.equal("congested" in a.counts.at(-1), false, "观众不带 congested");
+  assert.equal(a.counts.at(-1).count, 2);
+  // 观众离开后再广播
+  hub.removeClient(b);
+  await delay(60);
+  assert.equal(full.counts.at(-1).count, 1);
+});
+
+test("围观战报：finishLink 汇总 visitors/peak/reactions，只发全权、只发一次、无访客不发", async () => {
+  const server = mockAppServer();
+  const hub = new SessionHub(server, { reactionWindowMs: 10, viewerCountDebounceMs: 10 });
+  const full = mockClient();
+  const viewer = mockViewer("thr-1", "dv1");
+  hub.registerClient(full);
+  hub.registerClient(viewer);
+  hub.addReaction("thr-1", "👏", "dv1");
+  hub.finishLink("dv1");
+  assert.equal(full.summaries.length, 1);
+  assert.deepEqual(full.summaries[0], {
+    sessionId: "thr-1", deviceId: "dv1", visitors: 1, peak: 1, reactions: 1,
+  });
+  assert.equal(viewer.summaries.length, 0, "战报不发观众");
+  hub.finishLink("dv1");
+  assert.equal(full.summaries.length, 1, "重复 finishLink 幂等");
+  hub.finishLink("dv-nobody");
+  assert.equal(full.summaries.length, 1, "没人来过的链接没有战报");
+});
+
+test("拥塞观众全部离开后向全权设备补发 congested:false（横幅不悬挂）", async () => {
+  const server = mockAppServer();
+  const hub = new SessionHub(server, {
+    viewerCountDebounceMs: 5,
+    congestionTickMs: 10,
+    congestionAfterMs: 10,
+  });
+  const full = mockClient();
+  hub.registerClient(full);
+  const jammed = mockViewer("thr-1", "dv1");
+  jammed.congestedSince = Date.now() - 1000; // 帧积压已久
+  hub.registerClient(jammed);
+  await delay(60);
+  assert.equal(full.counts.at(-1)?.congested, true, "拥塞翻转已广播");
+  hub.removeClient(jammed);
+  await delay(60);
+  const last = full.counts.at(-1);
+  assert.equal(last.count, 0);
+  assert.equal(last.congested, false, "观众走光时清除标志并广播翻转");
+});
+
+test("reconcileLinks：配置里消失的链接即使无在线观众也交战报，幂等且不误伤有效链接", async () => {
+  const server = mockAppServer();
+  const hub = new SessionHub(server, { viewerCountDebounceMs: 5 });
+  const full = mockClient();
+  hub.registerClient(full);
+  const a = mockViewer("thr-1", "dv-gone");
+  const b = mockViewer("thr-1", "dv-alive");
+  hub.registerClient(a);
+  hub.registerClient(b);
+  hub.removeClient(a); // 观众早已离线，桌面端此后才撤销链接
+  hub.removeClient(b);
+  hub.reconcileLinks(new Set(["dv-alive"]));
+  assert.equal(full.summaries.length, 1, "孤儿统计也交出战报");
+  assert.equal(full.summaries[0].deviceId, "dv-gone");
+  hub.reconcileLinks(new Set(["dv-alive"]));
+  assert.equal(full.summaries.length, 1, "重复对账幂等");
+  hub.reconcileLinks(new Set([]));
+  assert.equal(full.summaries.at(-1).deviceId, "dv-alive", "链接真被撤销后才交");
 });
 
 test("新建会话透传 cwd 并返回 threadId", async () => {

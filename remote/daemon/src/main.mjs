@@ -3,17 +3,22 @@
 // 用法：
 //   node remote/daemon/src/main.mjs start [--config <path>] [--relay <wss://...>] [--codex <cmd>]
 //   node remote/daemon/src/main.mjs pair  [--config <path>]
+import { writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { parseArgs } from "node:util";
 
 import { AppServer } from "./app-server.mjs";
 import { ClientSession } from "./client-session.mjs";
 import {
   defaultConfigPath,
+  isDeviceExpired,
+  isViewerDevice,
   issuePairToken,
   loadOrCreateConfig,
   pairUrl,
   saveConfig,
 } from "./config.mjs";
+import { enforceDevices, watchConfig } from "./config-watch.mjs";
 import { privateKeyFromPem } from "./crypto.mjs";
 import { writeDesktopRefreshSignal } from "./desktop-signal.mjs";
 import { Notifier, redact } from "./notify.mjs";
@@ -64,12 +69,28 @@ export async function startDaemon({ configPath, overrides = {} }) {
     }
     return nameCache.get(id) || "一个会话";
   }
+  // 在线观众数落盘（节流）：桌面设备页是无常驻进程的 CLI，靠读此文件拿"N 人正在围观"。
+  // daemon 启动时也写一次，清掉上次异常退出的残留计数。
+  const viewerStatusFile = join(dirname(configPath), "viewer-status.json");
+  let viewerStatusTimer = null;
+  function scheduleViewerStatusWrite() {
+    if (viewerStatusTimer) return;
+    viewerStatusTimer = setTimeout(() => {
+      viewerStatusTimer = null;
+      try {
+        writeFileSync(viewerStatusFile, JSON.stringify({ ts: Date.now(), byDevice: hub.viewerStats() }));
+      } catch {}
+    }, 1000);
+    viewerStatusTimer.unref?.();
+  }
+
   const hub = new SessionHub(appServer, {
     log,
     onAwakeChange(want) {
       if (config.preventSleep === false) return;
       want ? power.acquire() : power.release();
     },
+    onViewersChange: scheduleViewerStatusWrite,
     async onEvent(type, { sessionId, clientsOnline }) {
       const name = await sessionName(sessionId);
       if (type === "turnCompleted") {
@@ -93,6 +114,7 @@ export async function startDaemon({ configPath, overrides = {} }) {
   });
   // 引擎状态变化（崩溃自动重拉期间）推给手机端，供分层连接诊断
   appServer.onStateChange = (healthy) => hub.broadcastEngineState(healthy);
+  const sessions = new Map(); // cid -> ClientSession
   const daemonContext = {
     config,
     configPath,
@@ -100,6 +122,15 @@ export async function startDaemon({ configPath, overrides = {} }) {
     appServer,
     hub,
     log,
+    // relay 上行水位（观众帧低优先级排空的依据）；relay 在下方初始化，运行期才会被调用
+    getBufferedAmount: () => relay.bufferedAmount,
+    // 按 deviceId 断开全部在线连接（share.revoke 协议路径用）。
+    // 连接数百级，O(n) 扫描比维护双写索引简单且不会失同步。
+    kickDevice(deviceId) {
+      for (const session of sessions.values()) {
+        if (session.deviceId === deviceId) session.kick();
+      }
+    },
     // 新建会话的目录白名单：未配置则允许任意（r0.6 安装器会写入默认白名单）
     isCwdAllowed(cwd) {
       const allow = config.allowedCwds;
@@ -112,7 +143,6 @@ export async function startDaemon({ configPath, overrides = {} }) {
     },
   };
 
-  const sessions = new Map(); // cid -> ClientSession
   const relay = new RelayLink(config.relayUrl, config.daemonId, {
     log,
     onOpen(cid) {
@@ -140,10 +170,41 @@ export async function startDaemon({ configPath, overrides = {} }) {
     },
   });
   relay.start();
+  scheduleViewerStatusWrite(); // 启动即写：清掉异常退出残留的观众计数
+
+  // 撤销/过期即踢：配置文件变更（桌面撤销走独立 CLI 进程写盘）与 60s 定时器
+  // （覆盖 expiresAt 到期）双路触发设备表核对。
+  const enforce = () =>
+    enforceDevices({
+      configPath,
+      listConnections: () => sessions.values(),
+      onConfig: (fresh) => {
+        daemonContext.config = fresh;
+        // 战报对账：桌面端撤销/到期时观众可能早已离线，onKicked 踢不到人；
+        // 以「配置中仍存在且未过期的 viewer」为准，孤儿统计也交出战报
+        const valid = new Set(
+          (fresh.devices ?? [])
+            .filter((d) => isViewerDevice(d) && !isDeviceExpired(d))
+            .map((d) => d.deviceId),
+        );
+        hub.reconcileLinks(valid);
+      },
+      // 围观链接被撤销/过期踢断时交出战报（幂等：首个被踢观众触发，其余空转）
+      onKicked: (session) => {
+        if (session.isViewer) hub.finishLink(session.deviceId);
+      },
+      log,
+    });
+  const configWatcher = watchConfig(configPath, { onChange: enforce });
+  const expiryTimer = setInterval(enforce, 60_000);
+  expiryTimer.unref?.();
+
   log(`daemon 已启动: id=${config.daemonId} name=${config.daemonName}`);
 
   return {
     stop() {
+      configWatcher.close();
+      clearInterval(expiryTimer);
       relay.stop();
       appServer.stop();
       for (const session of sessions.values()) session.dispose();

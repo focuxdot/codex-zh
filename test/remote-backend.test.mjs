@@ -189,6 +189,50 @@ test("prune-unused 只删从未连接（lastSeenAt 空）的设备", () => {
   }
 });
 
+test("围观条目：devices 透传扩展字段与在线观众数；prune 不删围观链接", () => {
+  const h = harness();
+  try {
+    const config = loadOrCreateConfig(h.deps.configPath);
+    config.devices = [
+      { deviceId: "full1", name: "iPhone", tokenHash: "a", createdAt: 1, lastSeenAt: 2 },
+      // 生成后从未有人点开的永久围观链接（作品集场景的合法状态）
+      { deviceId: "v1", name: "围观链接 · 重构支付", tokenHash: "b", createdAt: 3, lastSeenAt: null,
+        role: "viewer", scope: { sessionId: "thr-1" }, sessionName: "重构支付",
+        expiresAt: null, muted: false, url: "https://example/remote/#d=xxx" },
+    ];
+    saveConfig(h.deps.configPath, config);
+
+    // daemon 落盘的在线观众数（daemon 运行中才作数）
+    writeFileSync(
+      join(h.dir, "viewer-status.json"),
+      JSON.stringify({ ts: Date.now(), byDevice: { v1: 3 } }),
+    );
+
+    // daemon 未运行：观众数视为 0
+    let viewer = listDevices(h.deps).devices.find((d) => d.deviceId === "v1");
+    assert.equal(viewer.role, "viewer");
+    assert.equal(viewer.sessionName, "重构支付");
+    assert.equal(viewer.expiresAt, null);
+    assert.equal(viewer.url.includes("#d="), true);
+    assert.equal(viewer.viewers, 0);
+    // 全权条目不带围观字段
+    const full = listDevices(h.deps).devices.find((d) => d.deviceId === "full1");
+    assert.equal("role" in full, false);
+
+    // daemon 运行中：合并 viewer-status 的计数
+    h.deps.__running = true;
+    viewer = listDevices(h.deps).devices.find((d) => d.deviceId === "v1");
+    assert.equal(viewer.viewers, 3);
+
+    // prune：围观链接虽从未被点开也不删（静默 prune 等于暗杀分享链接）
+    const res = pruneUnusedDevices(h.deps);
+    assert.equal(res.removed, 0);
+    assert.equal(listDevices(h.deps).devices.length, 2);
+  } finally {
+    h.cleanup();
+  }
+});
+
 test("notify 增删列，label 脱敏", () => {
   const h = harness();
   try {

@@ -321,13 +321,26 @@ final class MenuController: NSObject, NSMenuDelegate {
             row.spacing = 10
             row.alignment = .centerY
             let id = d["deviceId"] as? String ?? "?"
+            let isViewer = (d["role"] as? String) == "viewer"
             let name = (d["name"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "设备 \(id.prefix(6))"
 
-            // 主标题（可读设备名） + 副标题（最近连接时间 · 短ID，便于区分同名设备）竖排
-            let title = NSTextField(labelWithString: name)
+            // 主标题（可读设备名；围观链接带只读徽标） + 副标题竖排
+            let title = NSTextField(labelWithString: isViewer ? "🔗 \(name)（只读）" : name)
             let idTag = "#\(id.prefix(6))"
             let subtitle: String
-            if let seen = formatEpochMs((d["lastSeenAt"] as? NSNumber)?.doubleValue) {
+            if isViewer {
+                // 围观链接：时效 + 在线观众数（daemon 落盘的 viewer-status），撤销即全场踢
+                let expiry: String
+                if let exp = (d["expiresAt"] as? NSNumber)?.doubleValue, exp > 0 {
+                    expiry = exp <= Date().timeIntervalSince1970 * 1000
+                        ? "已过期" : "至 \(formatEpochMs(exp) ?? "-")"
+                } else {
+                    expiry = "永久"
+                }
+                let viewers = (d["viewers"] as? NSNumber)?.intValue ?? 0
+                let watching = viewers > 0 ? "\(viewers) 人正在围观" : "暂无人围观"
+                subtitle = "\(expiry) · \(watching) · \(idTag)"
+            } else if let seen = formatEpochMs((d["lastSeenAt"] as? NSNumber)?.doubleValue) {
                 subtitle = "最近连接：\(seen) · \(idTag)"
             } else if let made = formatEpochMs((d["createdAt"] as? NSNumber)?.doubleValue) {
                 subtitle = "从未连接（配对于 \(made)） · \(idTag)"
@@ -344,7 +357,7 @@ final class MenuController: NSObject, NSMenuDelegate {
             col.translatesAutoresizingMaskIntoConstraints = false
             col.widthAnchor.constraint(equalToConstant: 220).isActive = true
 
-            let btn = NSButton(title: "移除", target: self, action: #selector(revokeTapped(_:)))
+            let btn = NSButton(title: isViewer ? "撤销" : "移除", target: self, action: #selector(revokeTapped(_:)))
             btn.identifier = NSUserInterfaceItemIdentifier(id)
             row.addArrangedSubview(col)
             row.addArrangedSubview(btn)
@@ -353,7 +366,10 @@ final class MenuController: NSObject, NSMenuDelegate {
 
         // "从未连接"的条目 = 生成过但没人扫过的链接（lastSeenAt 空）。给一键清理，
         // 作废这些悬空令牌——曾外泄/转发但没被使用的链接随即失效。
-        let unused = devices.filter { (($0["lastSeenAt"] as? NSNumber)?.doubleValue ?? 0) <= 0 }.count
+        // 围观链接不算在内（作品集永久链接长期无人点开是合法状态，后端 prune 也会跳过）。
+        let unused = devices.filter {
+            (($0["lastSeenAt"] as? NSNumber)?.doubleValue ?? 0) <= 0 && ($0["role"] as? String) != "viewer"
+        }.count
         var extra = 0
         if unused > 0 {
             let tip = NSTextField(labelWithString: "有 \(unused) 条从未连接的链接（生成过但没被扫过）")

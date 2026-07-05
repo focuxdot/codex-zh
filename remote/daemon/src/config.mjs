@@ -62,8 +62,10 @@ export function issuePairToken(path, config) {
 }
 
 // 创建一个设备条目并铸造其明文设备令牌（只在配置里存哈希）。
-// 由配对消费（consumePairToken）与永久链接签发（issueDeviceToken）共用，避免结构漂移。
-function createDevice(config, name = "") {
+// 由配对消费（consumePairToken）、永久链接签发（issueDeviceToken）与围观链接
+// 签发（issueViewerToken）共用，避免结构漂移。extra 承载围观扩展字段
+// （role/scope/expiresAt/sessionName/muted/url），存量调用不传即无这些字段。
+function createDevice(config, name = "", extra = {}) {
   const now = Date.now();
   const device = {
     deviceId: randomId(8),
@@ -71,11 +73,24 @@ function createDevice(config, name = "") {
     name,
     createdAt: now,
     lastSeenAt: null, // 尚未真正连接过；首次鉴权成功时才写入（也用于"新设备首次连接"提醒判定）
+    ...extra,
   };
   const deviceToken = randomToken();
   device.tokenHash = sha256(deviceToken);
   config.devices.push(device);
   return { device, deviceToken };
+}
+
+// —— 围观（单会话只读）——
+// 缺省无 role 字段即全权，与存量设备兼容；权限判定一律以此处条目为准，
+// 链接载荷里的 ro/sid/sname 仅是给观众端 UI 的显示提示。
+export function isViewerDevice(device) {
+  return device?.role === "viewer";
+}
+
+// expiresAt 为 null/缺省 = 永久档；仅数字且已过即过期
+export function isDeviceExpired(device, now = Date.now()) {
+  return typeof device?.expiresAt === "number" && device.expiresAt <= now;
 }
 
 // 校验并消费配对令牌；daemon 进程在每次配对尝试时重读配置，
@@ -103,6 +118,25 @@ export function issueDeviceToken(path, config, { name = "" } = {}) {
 export function findDeviceByToken(config, deviceToken) {
   const hash = sha256(deviceToken);
   return (config.devices ?? []).find((d) => d.tokenHash === hash) ?? null;
+}
+
+// 按浏览器身份归并：同一浏览器（clientId 相同——手机端存在 localStorage 里的随机 id，
+// 按浏览器/站点隔离，故微信/Chrome/Firefox 各算一台）重新配对时，作废它名下的旧凭据，
+// 只保留当前这条，使"同一浏览器 = 一台设备"。副带好处：旧链接一旦被同浏览器重配即失效，
+// 万一外泄更安全。围观条目是共享凭据、绝不参与归并。返回被作废的 deviceId 列表（供踢下线）。
+export function mergeDevicesByClient(config, keepDeviceId, clientId) {
+  if (!clientId) return [];
+  const removed = [];
+  config.devices = (config.devices ?? []).filter((d) => {
+    if (d.deviceId === keepDeviceId) return true;
+    if (isViewerDevice(d)) return true;
+    if (d.clientId && d.clientId === clientId) {
+      removed.push(d.deviceId);
+      return false;
+    }
+    return true;
+  });
+  return removed;
 }
 
 export function buildPairPayload(config, pairToken) {
@@ -143,4 +177,41 @@ export function deviceUrl(config, deviceToken) {
   );
   const base = config.webUrl || "https://example.invalid/remote";
   return `${base}#d=${payload}`;
+}
+
+// 围观链接载荷：沿用 #d= 机制，追加只读提示字段供观众端 UI 渲染。
+// ro=1 只读标记；sid 目标会话；sname 会话名（截断控制载荷与 QR 体积）。
+export function buildViewerPayload(config, deviceToken, { sessionId, sessionName = "" }) {
+  return {
+    ...buildDevicePayload(config, deviceToken),
+    ro: 1,
+    sid: sessionId,
+    sname: String(sessionName).slice(0, 20),
+  };
+}
+
+export function viewerUrl(config, deviceToken, opts) {
+  const payload = Buffer.from(
+    JSON.stringify(buildViewerPayload(config, deviceToken, opts)),
+  ).toString("base64url");
+  const base = config.webUrl || "https://example.invalid/remote";
+  return `${base}#d=${payload}`;
+}
+
+// 签发一条围观链接：单会话只读设备条目 + 内嵌其令牌的链接。
+// 条目名固定为「围观链接 · 会话名」（viewer 鉴权不用 UA 改写它）；
+// 明文 url 存回条目——分享弹窗对已有链接提供"复制"，令牌仅授权单会话只读，
+// 能读到配置文件的人本就能读全部会话，静态明文不引入新风险。
+export function issueViewerToken(path, config, { sessionId, sessionName = "", ttlMs = null }) {
+  const shortName = String(sessionName).slice(0, 20);
+  const { device, deviceToken } = createDevice(config, `围观链接 · ${shortName || sessionId}`, {
+    role: "viewer",
+    scope: { sessionId },
+    sessionName: shortName,
+    expiresAt: ttlMs ? Date.now() + ttlMs : null,
+    muted: false,
+  });
+  device.url = viewerUrl(config, deviceToken, { sessionId, sessionName: shortName });
+  saveConfig(path, config);
+  return { device, deviceToken };
 }

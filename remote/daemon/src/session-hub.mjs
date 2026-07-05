@@ -16,11 +16,39 @@ export class SessionHub {
   #awake = false;
   #onEvent;
 
-  constructor(appServer, { log = () => {}, onAwakeChange = () => {}, onEvent = () => {} } = {}) {
+  #onViewersChange;
+  // —— 围观层互动（daemon 自己的通知广播，与 rollout/turn 完全不同路，绝不进 agent 上下文）——
+  #reactionBuf = new Map(); // sessionId -> Map<emoji, count>（1s 合并窗口）
+  #reactionTimer = null;
+  #reactionWindowMs;
+  #viewerCountDirty = new Set(); // 待广播 viewer.count 的 sessionId
+  #viewerCountTimer = null;
+  #viewerCountDebounceMs;
+  #congested = new Map(); // sessionId -> bool（拥塞状态，翻转时补发 viewer.count）
+  #congestionTimer = null;
+  #congestionTickMs;
+  #congestionAfterMs;
+  #linkStats = new Map(); // deviceId -> {sessionId, visitors, peak, reactions}（内存，重启即清）
+
+  constructor(appServer, {
+    log = () => {},
+    onAwakeChange = () => {},
+    onEvent = () => {},
+    onViewersChange = () => {},
+    reactionWindowMs = 1000,
+    viewerCountDebounceMs = 500,
+    congestionTickMs = 3000,
+    congestionAfterMs = 3000,
+  } = {}) {
     this.#appServer = appServer;
     this.#log = log;
     this.#onAwakeChange = onAwakeChange;
     this.#onEvent = onEvent; // (type, {sessionId, clientsOnline}) —— webhook 通知用
+    this.#onViewersChange = onViewersChange; // 观众上下线（viewer-status 落盘 / viewer.count 广播）
+    this.#reactionWindowMs = reactionWindowMs;
+    this.#viewerCountDebounceMs = viewerCountDebounceMs;
+    this.#congestionTickMs = congestionTickMs;
+    this.#congestionAfterMs = congestionAfterMs;
     appServer.onNotification = (method, params) => this.#onNotification(method, params);
     appServer.onServerRequest = (id, method, params) => this.#onServerRequest(id, method, params);
   }
@@ -40,11 +68,184 @@ export class SessionHub {
   // —— 设备注册（鉴权成功后调用）——
   registerClient(client) {
     this.#clients.add(client);
-    // 新设备上线立即补发所有待决审批，避免"审批在没人看的时候发生"
-    for (const [key, entry] of this.#approvals) {
-      client.pushApproval(key, entry.threadId, entry.method, entry.params);
+    // 新设备上线立即补发所有待决审批，避免"审批在没人看的时候发生"。
+    // 观众除外：审批内容（命令原文、diff）不该出现在观众的通知面上。
+    if (!client.isViewer) {
+      for (const [key, entry] of this.#approvals) {
+        client.pushApproval(key, entry.threadId, entry.method, entry.params);
+      }
+    } else {
+      // 战报计数（visitors 累计 / peak 该链接并发峰值）——内存态，重启即清
+      const stats = this.#statsFor(client.deviceId, client.scopeSessionId);
+      if (stats) {
+        stats.visitors += 1;
+        stats.peak = Math.max(stats.peak, this.viewerCountByDevice(client.deviceId));
+      }
+      this.#markViewersChanged(client.scopeSessionId);
+      this.#ensureCongestionWatch();
+      this.#onViewersChange();
     }
     this.#updateAwake();
+  }
+
+  #statsFor(deviceId, sessionId) {
+    if (!deviceId) return null;
+    let stats = this.#linkStats.get(deviceId);
+    if (!stats) {
+      stats = { sessionId: sessionId ?? null, visitors: 0, peak: 0, reactions: 0 };
+      this.#linkStats.set(deviceId, stats);
+    }
+    return stats;
+  }
+
+  // 某会话的在线观众数：按 scope.sessionId 聚合（同一会话的全部围观链接计入
+  // 同一个数——按 deviceId 计数会被"多铸一条链接"静默绕过）。熔断与观众计数用。
+  viewerCount(sessionId) {
+    if (!sessionId) return 0;
+    let n = 0;
+    for (const client of this.#clients) {
+      if (client.isViewer && client.scopeSessionId === sessionId) n++;
+    }
+    return n;
+  }
+
+  // 单条围观链接的在线观众数（分享弹窗按链接展示用；熔断仍按会话聚合）
+  viewerCountByDevice(deviceId) {
+    let n = 0;
+    for (const client of this.#clients) {
+      if (client.isViewer && client.deviceId === deviceId) n++;
+    }
+    return n;
+  }
+
+  // 全部在线观众按 deviceId 聚合（viewer-status 落盘用，桌面设备页读取）
+  viewerStats() {
+    const byDevice = {};
+    for (const client of this.#clients) {
+      if (!client.isViewer || !client.deviceId) continue;
+      byDevice[client.deviceId] = (byDevice[client.deviceId] ?? 0) + 1;
+    }
+    return byDevice;
+  }
+
+  // —— 围观层互动：喝彩聚合（1s 合并窗口，无文字即无骂人/无审核/无注入面）——
+  addReaction(sessionId, emoji, deviceId) {
+    if (!sessionId) return;
+    if (!this.#reactionBuf.has(sessionId)) this.#reactionBuf.set(sessionId, new Map());
+    const byEmoji = this.#reactionBuf.get(sessionId);
+    byEmoji.set(emoji, (byEmoji.get(emoji) ?? 0) + 1);
+    const stats = deviceId ? this.#linkStats.get(deviceId) : null;
+    if (stats) stats.reactions += 1;
+    if (!this.#reactionTimer) {
+      this.#reactionTimer = setTimeout(() => {
+        this.#reactionTimer = null;
+        this.#flushReactions();
+      }, this.#reactionWindowMs);
+      this.#reactionTimer.unref?.();
+    }
+  }
+
+  #flushReactions() {
+    for (const [sessionId, byEmoji] of this.#reactionBuf) {
+      for (const [emoji, count] of byEmoji) {
+        this.#pushToSessionAudience(sessionId, (client) =>
+          client.pushShareReaction?.({ sessionId, emoji, count }));
+      }
+    }
+    this.#reactionBuf.clear();
+  }
+
+  // 会话的"观众面"：全部全权设备（分享者在任何页面都能看到喝彩/人数）+ 该会话的观众
+  #pushToSessionAudience(sessionId, push) {
+    for (const client of this.#clients) {
+      if (client.isViewer && client.scopeSessionId !== sessionId) continue;
+      push(client);
+    }
+  }
+
+  // —— viewer.count：观众进出防抖广播；congested 仅发全权设备 ——
+  #markViewersChanged(sessionId) {
+    if (!sessionId) return;
+    this.#viewerCountDirty.add(sessionId);
+    if (this.#viewerCountTimer) return;
+    this.#viewerCountTimer = setTimeout(() => {
+      this.#viewerCountTimer = null;
+      const dirty = [...this.#viewerCountDirty];
+      this.#viewerCountDirty.clear();
+      for (const sid of dirty) this.#broadcastViewerCount(sid);
+    }, this.#viewerCountDebounceMs);
+    this.#viewerCountTimer.unref?.();
+  }
+
+  #broadcastViewerCount(sessionId) {
+    const count = this.viewerCount(sessionId);
+    const congested = this.#congested.get(sessionId) === true;
+    this.#pushToSessionAudience(sessionId, (client) =>
+      client.pushViewerCount?.(
+        client.isViewer ? { sessionId, count } : { sessionId, count, congested }));
+  }
+
+  // 观众帧持续积压 >3s 判为拥塞；状态翻转时补发一次 viewer.count 让分享者看得见。
+  // 定时器只在有观众时运转（懒启动，无观众即停）。
+  #ensureCongestionWatch() {
+    if (this.#congestionTimer) return;
+    this.#congestionTimer = setInterval(() => {
+      const bySession = new Map(); // sid -> 拥塞与否
+      let anyViewer = false;
+      for (const client of this.#clients) {
+        if (!client.isViewer || !client.scopeSessionId) continue;
+        anyViewer = true;
+        const sid = client.scopeSessionId;
+        const jammed =
+          client.congestedSince > 0 && Date.now() - client.congestedSince > this.#congestionAfterMs;
+        bySession.set(sid, (bySession.get(sid) ?? false) || jammed);
+      }
+      for (const [sid, jammed] of bySession) {
+        if ((this.#congested.get(sid) === true) !== jammed) {
+          this.#congested.set(sid, jammed);
+          this.#broadcastViewerCount(sid);
+        }
+      }
+      for (const sid of [...this.#congested.keys()]) {
+        if (!bySession.has(sid)) {
+          // 拥塞会话的观众全走了也要广播翻转，否则分享者端「围观人数较多」悬挂
+          const wasJammed = this.#congested.get(sid) === true;
+          this.#congested.delete(sid);
+          if (wasJammed) this.#broadcastViewerCount(sid);
+        }
+      }
+      if (!anyViewer) {
+        clearInterval(this.#congestionTimer);
+        this.#congestionTimer = null;
+      }
+    }, this.#congestionTickMs);
+    this.#congestionTimer.unref?.();
+  }
+
+  // —— 围观战报：链接撤销/过期时向全权设备交出计数（内存态，重启即清）——
+  finishLink(deviceId) {
+    const stats = this.#linkStats.get(deviceId);
+    if (!stats) return;
+    this.#linkStats.delete(deviceId);
+    if (stats.visitors === 0) return; // 没人来过的链接没有战报可言
+    for (const client of this.#clients) {
+      if (client.isViewer) continue;
+      client.pushShareSummary?.({
+        sessionId: stats.sessionId,
+        deviceId,
+        visitors: stats.visitors,
+        peak: stats.peak,
+        reactions: stats.reactions,
+      });
+    }
+  }
+
+  // 对账：统计里还挂着、但配置中已消失/已过期的链接（桌面端撤销或到期时
+  // 观众可能早已离线，enforceDevices 踢不到任何连接），也要交出战报并清统计
+  reconcileLinks(validDeviceIds) {
+    for (const deviceId of [...this.#linkStats.keys()]) {
+      if (!validDeviceIds.has(deviceId)) this.finishLink(deviceId);
+    }
   }
 
   // —— 订阅（查看） ——
@@ -161,8 +362,11 @@ export class SessionHub {
     if (!entry) return { ok: false, reason: "审批不存在或已被处理" };
     this.#approvals.delete(approvalKey);
     this.#appServer.respond(entry.requestId, { decision });
-    // 其他设备的审批卡片同步消失
-    for (const client of this.#clients) client.pushApprovalResolved(approvalKey);
+    // 其他设备的审批卡片同步消失（观众本就收不到审批，resolved 也不发）
+    for (const client of this.#clients) {
+      if (client.isViewer) continue;
+      client.pushApprovalResolved(approvalKey);
+    }
     this.#broadcastBoard(entry.threadId);
     return { ok: true };
   }
@@ -206,8 +410,10 @@ export class SessionHub {
     if (this.#clients.size === 0) {
       this.#log(`审批 ${approvalKey} 暂无在线设备，挂起等待（设备上线后补发）`);
     }
-    // 广播给所有设备：审批是头号阻塞，必须在任何页面都能看到
+    // 广播给所有全权设备：审批是头号阻塞，必须在任何页面都能看到。
+    // 观众无法决策，命令原文与 diff 也不该达至观众端。
     for (const client of this.#clients) {
+      if (client.isViewer) continue;
       client.pushApproval(approvalKey, threadId, method, params);
     }
     this.#broadcastBoard(threadId);
@@ -215,22 +421,31 @@ export class SessionHub {
     this.#onEvent("approval", { sessionId: threadId, clientsOnline: this.#clients.size });
   }
 
-  // 看板变更（运行状态/审批数变化），客户端据此刷新列表徽标
+  // 看板变更（运行状态/审批数变化），客户端据此刷新列表徽标。
+  // 不发观众：它携带其他会话的运行状态与审批数（观众端也无看板）。
   #broadcastBoard(threadId) {
     const payload = {
       sessionId: threadId,
       running: this.isRunning(threadId),
       approvals: this.approvalCount(threadId),
     };
-    for (const client of this.#clients) client.pushBoardChanged(payload);
+    for (const client of this.#clients) {
+      if (client.isViewer) continue;
+      client.pushBoardChanged(payload);
+    }
   }
 
   // client 断开时清理
   removeClient(client) {
+    const wasViewer = this.#clients.has(client) && client.isViewer;
     this.#clients.delete(client);
     for (const [threadId, subs] of this.#subscribers) {
       subs.delete(client);
       if (subs.size === 0) this.#subscribers.delete(threadId);
+    }
+    if (wasViewer) {
+      this.#markViewersChanged(client.scopeSessionId);
+      this.#onViewersChange();
     }
     this.#updateAwake();
   }

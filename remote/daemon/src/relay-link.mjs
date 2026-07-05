@@ -87,6 +87,11 @@ export class RelayLink {
     setTimeout(() => this.#connect(), delay).unref?.();
   }
 
+  // relay WebSocket 的未冲刷字节数：观众帧低优先级排空的水位依据
+  get bufferedAmount() {
+    return this.#ws?.bufferedAmount ?? 0;
+  }
+
   send(cid, data) {
     this.#sendRaw({ t: "msg", cid, data });
   }

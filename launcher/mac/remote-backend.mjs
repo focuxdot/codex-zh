@@ -189,11 +189,35 @@ export function pairOnce(deps) {
   return { url: pairUrl(loadOrCreateConfig(deps.configPath), token) };
 }
 
+// 在线观众数：daemon 在观众上下线时把按 deviceId 聚合的计数节流写入 viewer-status.json
+//（本 CLI 无常驻进程，这是唯一不引协议通道的取数路径）。daemon 没在跑则视为无人围观。
+function readViewerStatus(deps) {
+  if (!isRunning(deps)) return {};
+  try {
+    const p = path.join(path.dirname(deps.configPath), "viewer-status.json");
+    return JSON.parse(readFileSync(p, "utf8"))?.byDevice ?? {};
+  } catch {
+    return {};
+  }
+}
+
 export function listDevices(deps) {
   const config = existsSync(deps.configPath) ? loadOrCreateConfig(deps.configPath) : { devices: [] };
+  const viewers = readViewerStatus(deps);
   return {
     devices: (config.devices ?? []).map((d) => ({
       deviceId: d.deviceId, name: d.name || "", createdAt: d.createdAt, lastSeenAt: d.lastSeenAt,
+      // 围观链接扩展字段（全权设备缺省）：桌面设备页渲染只读徽标/会话名/时效/观众数
+      ...(d.role === "viewer"
+        ? {
+            role: "viewer",
+            sessionName: d.sessionName ?? "",
+            expiresAt: d.expiresAt ?? null,
+            muted: d.muted === true,
+            url: d.url ?? null,
+            viewers: viewers[d.deviceId] ?? 0,
+          }
+        : {}),
     })),
   };
 }
@@ -209,10 +233,11 @@ export function revokeDevice(deps, deviceId) {
 // 清理"从未连接"的设备（lastSeenAt 空）——即生成过但没人扫过的链接。移除它们等于
 // 作废这些悬空令牌：以前若有外泄/转发但没被使用的链接会随即失效（撤销即时生效，
 // 因 daemon 每次鉴权重读配置）。不影响任何已连过的设备。
+// 围观链接除外：作品集永久链接"生成后长期无人点开"是合法状态，静默 prune 等于暗杀分享链接。
 export function pruneUnusedDevices(deps) {
   const config = loadOrCreateConfig(deps.configPath);
   const before = (config.devices ?? []).length;
-  config.devices = (config.devices ?? []).filter((d) => d.lastSeenAt);
+  config.devices = (config.devices ?? []).filter((d) => d.lastSeenAt || d.role === "viewer");
   const removed = before - config.devices.length;
   saveConfig(deps.configPath, config);
   return { ok: true, removed };
