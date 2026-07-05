@@ -40,6 +40,19 @@ test("配置初始化：生成密钥与 daemonId 并持久化", () => {
   }
 });
 
+test("配置读取：容忍 UTF-8 BOM（Windows 上 PowerShell/记事本改写常带）", () => {
+  const { dir, path } = tempConfig();
+  try {
+    const config = loadOrCreateConfig(path); // 先正常生成
+    // 模拟被带 BOM 的工具改写：在 UTF-8 文本前置 BOM 字节（U+FEFF）
+    writeFileSync(path, `﻿${JSON.stringify(config)}`, "utf8");
+    const reloaded = loadOrCreateConfig(path); // 不应抛 JSON 解析错误
+    assert.equal(reloaded.daemonId, config.daemonId);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("配对令牌：一次性消费，签发设备令牌", () => {
   const { dir, path } = tempConfig();
   try {

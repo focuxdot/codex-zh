@@ -23,7 +23,10 @@ export function sha256(value) {
 
 export function loadOrCreateConfig(path = defaultConfigPath()) {
   if (existsSync(path)) {
-    return JSON.parse(readFileSync(path, "utf8"));
+    // 去掉可能的 UTF-8 BOM：Windows 上用 PowerShell/记事本等改写配置常带 BOM，
+    // Node 以 "utf8" 读不会自动剥离，JSON.parse 会在首字符处报错、daemon 直接崩。
+    const raw = readFileSync(path, "utf8");
+    return JSON.parse(raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw);
   }
   const keys = generateKeyPair();
   const config = {
