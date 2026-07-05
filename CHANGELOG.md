@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.2.0
 
 - 新增 macOS 版（Apple 芯片 / arm64）：集成打包官方 Codex.app，中文界面、中转站向导与本地能力对齐 Windows 版；dmg 内附「允许运行 Codex-ZH.command」去隔离助手。
 - 新增手机远程接管（macOS 版内置，菜单栏扫码开启）：任务看板、远程审批（含着色 diff 与高危警示）、发消息/接管/新建会话、多电脑切换、Bark/Server酱/企业微信/钉钉通知；端到端加密，中继零知识，默认关闭。
