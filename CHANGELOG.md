@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- 新增 macOS 版（Apple 芯片 / arm64）：集成打包官方 Codex.app，中文界面、中转站向导与本地能力对齐 Windows 版；dmg 内附「允许运行 Codex-ZH.command」去隔离助手。
+- 新增手机远程接管（macOS 版内置，菜单栏扫码开启）：任务看板、远程审批（含着色 diff 与高危警示）、发消息/接管/新建会话、多电脑切换、Bark/Server酱/企业微信/钉钉通知；端到端加密，中继零知识，默认关闭。
+- 新增会话围观分享：单会话只读链接（24 小时/永久，随时撤销即踢），跑完的会话从头回放、跑着的实时围观，观众可喝彩/复制 prompt/转发，链接结束回收战报。
 - 明确提交日志、CHANGELOG、新功能说明和 Release 文案默认使用中文。
 - 新增中文日志检查脚本、commit-msg hook 和发布前提交标题校验。
 - Release workflow 改为从 CHANGELOG 版本章节生成用户可读更新说明。

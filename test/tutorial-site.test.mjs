@@ -103,7 +103,7 @@ test("README links to the tutorial landing page and all tutorial pages", () => {
   const baseUrl = "https://focuxdot.github.io/codex-zh/office-tutorials/";
 
   assert.match(readme, /Codex 高效办公实战课，原创“问补做”套路 · 真实办公案例。/u);
-  assert.match(readme, /\[Codex-ZH 办公实战教程第一季\]\(https:\/\/focuxdot\.github\.io\/codex-zh\/office-tutorials\/\)/u);
+  assert.match(readme, /\[C叉叉 办公实战教程第一季\]\(https:\/\/focuxdot\.github\.io\/codex-zh\/office-tutorials\/\)/u);
 
   for (const page of tutorialPages.filter((name) => name !== "index.html")) {
     assert.equal(readme.includes(`${baseUrl}${page}`), true, `README should link to ${page}`);
