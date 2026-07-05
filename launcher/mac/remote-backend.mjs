@@ -1,41 +1,34 @@
-// Node backend for the macOS menu-bar Remote controller (CodexZhRemoteMenu.swift).
+// macOS (launchd) backend for the menu-bar Remote controller (CodexZhRemoteMenu.swift).
 //
-// Swift is a pure view: it shells out to this CLI for every action. Same protocol
-// as wizard-backend.mjs — argv subcommand in, single JSON object out.
-//
-// Subcommands:
-//   status                       -> { enabled, running, deviceCount, notifierCount, relay }
-//   enable                       -> { ok, enabled } —— 装/加载 daemon+menu LaunchAgent
-//   disable                      -> { ok, enabled } —— bootout + 移除 plist
-//   pair                         -> { url } —— 签发永久设备令牌，返回 #d= URL 供 Swift 渲染 QR
-//   pair-once                    -> { url } —— 签发一次性配对令牌（5 分钟），返回 #p= URL
-//   devices                      -> { devices:[{deviceId,name,createdAt,lastSeenAt}] }
-//   revoke   <deviceId>          -> { ok }
-//   prune-unused                 -> { ok, removed } —— 删除所有从未连接的设备（作废悬空/外泄链接）
-//   notify-list                  -> { notifiers:[{index,label}] }
-//   notify-add  <inputFile>      -> { ok } （输入 {type,key?|url?,server?}，走临时文件）
-//   notify-remove <index>        -> { ok }
-//   notify-test                  -> { ok, count }
-//
-// 所有 daemon 逻辑复用 remote/daemon/src/*，绝不在此重复。
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+// Swift is a pure view: it shells out to this CLI for every action (argv subcommand
+// in, single JSON object out). The cross-platform command surface lives in
+// ../remote-backend-core.mjs; this file only supplies the macOS keepalive layer
+// (launchd plist + launchctl) and wires it into the core via makeDeps.
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-import {
-  defaultConfigPath,
-  deviceUrl,
-  issueDeviceToken,
-  issuePairToken,
-  loadOrCreateConfig,
-  pairUrl,
-  saveConfig,
-} from "../../remote/daemon/src/config.mjs";
-import { Notifier, redact } from "../../remote/daemon/src/notify.mjs";
+import { defaultConfigPath, loadOrCreateConfig, saveConfig } from "../../remote/daemon/src/config.mjs";
 import { resolveOfficialCodexHome } from "../../src/config-merge.mjs";
+import { run } from "../remote-backend-core.mjs";
+
+// 跨平台命令处理器从 core 直接透传，Swift/测试的导入契约不变
+export {
+  status,
+  pair,
+  pairOnce,
+  listDevices,
+  revokeDevice,
+  pruneUnusedDevices,
+  notifyList,
+  notifyAdd,
+  notifyRemove,
+  notifyTest,
+} from "../remote-backend-core.mjs";
+export { run };
 
 export const DAEMON_LABEL = "ai.wokey.codex-zh.remote";
 export const MENU_LABEL = "ai.wokey.codex-zh.remote-menu";
@@ -103,8 +96,9 @@ export function daemonPlist({ node, daemonMain, codexHome, logPath }) {
 // 由 Codex-ZH 启动器在打开 app 时带正确参数拉起（见 codex-zh-launcher.mjs
 // 的 spawnRemoteMenu）。常驻 LaunchAgent 既多余、又因参数缺失会 usage 死循环。
 
-// —— 核心逻辑（deps 可注入以便测试）——
-// deps: { configPath, launchAgentsDir, appRoot, homeDir, uid, runLaunchctl, fetch, log, now }
+// —— makeDeps：core 依赖 + 注入 launchd 版平台钩子（isEnabled/isRunning/enable/disable）——
+// deps: { configPath, launchAgentsDir, appRoot, homeDir, uid, runLaunchctl, fetch, log, now,
+//         isEnabled, isRunning, enable, disable }
 export function makeDeps(overrides = {}) {
   const home = overrides.homeDir || homedir();
   return {
@@ -117,6 +111,11 @@ export function makeDeps(overrides = {}) {
     fetch: overrides.fetch || globalThis.fetch,
     log: overrides.log || (() => {}),
     now: overrides.now || (() => Date.now()),
+    // 平台钩子：core 通过 deps.isEnabled(deps) 等调用，按平台替换即整套换保活层
+    isEnabled,
+    isRunning,
+    enable,
+    disable,
     ...overrides,
   };
 }
@@ -132,17 +131,6 @@ export function isEnabled(deps) {
 export function isRunning(deps) {
   const res = deps.runLaunchctl(["list"]);
   return typeof res.stdout === "string" && res.stdout.includes(DAEMON_LABEL);
-}
-
-export function status(deps) {
-  const config = existsSync(deps.configPath) ? loadOrCreateConfig(deps.configPath) : null;
-  return {
-    enabled: isEnabled(deps),
-    running: isRunning(deps),
-    deviceCount: config?.devices?.length ?? 0,
-    notifierCount: config?.notifiers?.length ?? 0,
-    relay: config?.relayUrl ?? "",
-  };
 }
 
 export function enable(deps) {
@@ -174,128 +162,10 @@ export function disable(deps) {
   return { ok: true, enabled: false };
 }
 
-// 永久链接：内嵌长期设备令牌，扫码/点击即永久连接（可在「已配对设备」撤销）
-export function pair(deps) {
-  const config = loadOrCreateConfig(deps.configPath);
-  if (!config.relayUrl) return { error: "未配置 relay" };
-  const { deviceToken } = issueDeviceToken(deps.configPath, config);
-  return { url: deviceUrl(loadOrCreateConfig(deps.configPath), deviceToken) };
-}
-
-// 一次性链接：5 分钟内有效、仅可用一次（适合临时发出去的场景）
-export function pairOnce(deps) {
-  const config = loadOrCreateConfig(deps.configPath);
-  if (!config.relayUrl) return { error: "未配置 relay" };
-  const token = issuePairToken(deps.configPath, config);
-  return { url: pairUrl(loadOrCreateConfig(deps.configPath), token) };
-}
-
-// 在线观众数：daemon 在观众上下线时把按 deviceId 聚合的计数节流写入 viewer-status.json
-//（本 CLI 无常驻进程，这是唯一不引协议通道的取数路径）。daemon 没在跑则视为无人围观。
-function readViewerStatus(deps) {
-  if (!isRunning(deps)) return {};
-  try {
-    const p = path.join(path.dirname(deps.configPath), "viewer-status.json");
-    return JSON.parse(readFileSync(p, "utf8"))?.byDevice ?? {};
-  } catch {
-    return {};
-  }
-}
-
-export function listDevices(deps) {
-  const config = existsSync(deps.configPath) ? loadOrCreateConfig(deps.configPath) : { devices: [] };
-  const viewers = readViewerStatus(deps);
-  return {
-    devices: (config.devices ?? []).map((d) => ({
-      deviceId: d.deviceId, name: d.name || "", createdAt: d.createdAt, lastSeenAt: d.lastSeenAt,
-      // 围观链接扩展字段（全权设备缺省）：桌面设备页渲染只读徽标/会话名/时效/观众数
-      ...(d.role === "viewer"
-        ? {
-            role: "viewer",
-            sessionName: d.sessionName ?? "",
-            expiresAt: d.expiresAt ?? null,
-            muted: d.muted === true,
-            url: d.url ?? null,
-            viewers: viewers[d.deviceId] ?? 0,
-          }
-        : {}),
-    })),
-  };
-}
-
-export function revokeDevice(deps, deviceId) {
-  const config = loadOrCreateConfig(deps.configPath);
-  const before = (config.devices ?? []).length;
-  config.devices = (config.devices ?? []).filter((d) => d.deviceId !== deviceId);
-  saveConfig(deps.configPath, config);
-  return { ok: config.devices.length < before };
-}
-
-// 清理"从未连接"的设备（lastSeenAt 空）——即生成过但没人扫过的链接。移除它们等于
-// 作废这些悬空令牌：以前若有外泄/转发但没被使用的链接会随即失效（撤销即时生效，
-// 因 daemon 每次鉴权重读配置）。不影响任何已连过的设备。
-// 围观链接除外：作品集永久链接"生成后长期无人点开"是合法状态，静默 prune 等于暗杀分享链接。
-export function pruneUnusedDevices(deps) {
-  const config = loadOrCreateConfig(deps.configPath);
-  const before = (config.devices ?? []).length;
-  config.devices = (config.devices ?? []).filter((d) => d.lastSeenAt || d.role === "viewer");
-  const removed = before - config.devices.length;
-  saveConfig(deps.configPath, config);
-  return { ok: true, removed };
-}
-
-export function notifyList(deps) {
-  const config = existsSync(deps.configPath) ? loadOrCreateConfig(deps.configPath) : { notifiers: [] };
-  return { notifiers: (config.notifiers ?? []).map((n, index) => ({ index, label: redact(n) })) };
-}
-
-export function notifyAdd(deps, entry) {
-  const config = loadOrCreateConfig(deps.configPath);
-  config.notifiers = config.notifiers ?? [];
-  config.notifiers.push(entry);
-  saveConfig(deps.configPath, config);
-  return { ok: true, count: config.notifiers.length };
-}
-
-export function notifyRemove(deps, index) {
-  const config = loadOrCreateConfig(deps.configPath);
-  config.notifiers = config.notifiers ?? [];
-  if (index < 0 || index >= config.notifiers.length) return { ok: false };
-  config.notifiers.splice(index, 1);
-  saveConfig(deps.configPath, config);
-  return { ok: true };
-}
-
-export async function notifyTest(deps) {
-  const config = existsSync(deps.configPath) ? loadOrCreateConfig(deps.configPath) : { notifiers: [] };
-  const notifier = new Notifier(config.notifiers ?? [], { fetch: deps.fetch, log: deps.log });
-  await notifier.send("Codex 远程测试", "如果你收到这条，说明通知渠道配置成功 ✅");
-  return { ok: true, count: notifier.count };
-}
-
-// —— CLI 分发 ——
-export async function run(command, rest, deps = makeDeps()) {
-  switch (command) {
-    case "status": return status(deps);
-    case "enable": return enable(deps);
-    case "disable": return disable(deps);
-    case "pair": return pair(deps);
-    case "pair-once": return pairOnce(deps);
-    case "devices": return listDevices(deps);
-    case "revoke": return revokeDevice(deps, rest[0]);
-    case "prune-unused": return pruneUnusedDevices(deps);
-    case "notify-list": return notifyList(deps);
-    case "notify-add": return notifyAdd(deps, JSON.parse(readFileSync(rest[0], "utf8")));
-    case "notify-remove": return notifyRemove(deps, Number(rest[0]));
-    case "notify-test": return notifyTest(deps);
-    default: return { error: `未知子命令: ${command}` };
-  }
-}
-
 const isDirectRun = process.argv[1] && path.basename(process.argv[1]) === "remote-backend.mjs";
 if (isDirectRun) {
   const [command, ...rest] = process.argv.slice(2);
-  run(command, rest)
+  run(command, rest, makeDeps())
     .then((result) => process.stdout.write(JSON.stringify(result)))
     .catch((err) => {
       process.stdout.write(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));

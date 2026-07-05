@@ -3,7 +3,7 @@
 // 用法：
 //   node remote/daemon/src/main.mjs start [--config <path>] [--relay <wss://...>] [--codex <cmd>]
 //   node remote/daemon/src/main.mjs pair  [--config <path>]
-import { writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { parseArgs } from "node:util";
 import { pathToFileURL } from "node:url";
@@ -28,12 +28,33 @@ import { RelayLink } from "./relay-link.mjs";
 import { SessionHub } from "./session-hub.mjs";
 import { resolve as resolvePath, sep as pathSep } from "node:path";
 
+// Windows 上 daemon 由计划任务拉起，<Exec> 无法重定向 stdout（Mac 靠 launchd 的
+// StandardOutPath 落 daemon.log）。故 win32 下 daemon 自行把日志追加到 daemon.log，
+// 与 Mac 对齐、便于排障。logFile 由 startDaemon 按 configPath 设定。
+let logFile = null;
 function log(message) {
-  console.log(`[${new Date().toISOString()}] ${message}`);
+  const line = `[${new Date().toISOString()}] ${message}`;
+  console.log(line);
+  if (logFile) {
+    try {
+      appendFileSync(logFile, `${line}\n`);
+    } catch {
+      // 落盘失败不影响 daemon 运行
+    }
+  }
 }
 
 export async function startDaemon({ configPath, overrides = {} }) {
   const config = loadOrCreateConfig(configPath);
+  // win32：daemon 自记日志到 config 同目录的 daemon.log（计划任务无法重定向 stdout）
+  if (process.platform === "win32") {
+    logFile = join(dirname(configPath), "daemon.log");
+    try {
+      mkdirSync(dirname(logFile), { recursive: true });
+    } catch {
+      // 目录已存在或不可建，忽略
+    }
+  }
   let changed = false;
   for (const key of ["relayUrl", "webUrl", "codexCommand"]) {
     if (overrides[key] && overrides[key] !== config[key]) {

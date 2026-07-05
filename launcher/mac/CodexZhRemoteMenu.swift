@@ -226,7 +226,7 @@ final class MenuController: NSObject, NSMenuDelegate {
         stack.edgeInsets = NSEdgeInsets(top: 26, left: 28, bottom: 26, right: 28)
 
         // 标题、说明、按钮都用系统语义色（labelColor 等），自动跟随系统明暗主题。
-        let title = NSTextField(labelWithString: "微信扫码-配对C叉叉")
+        let title = NSTextField(labelWithString: "微信扫码 · 配对C叉叉")
         title.font = .boldSystemFont(ofSize: 20)
 
         // 二维码垫一张恒定白底卡片（带留白/圆角）：CIQRCodeGenerator 出的是黑码透明底，
@@ -281,7 +281,7 @@ final class MenuController: NSObject, NSMenuDelegate {
         stack.addArrangedSubview(hint)
         stack.setCustomSpacing(22, after: hint)
         stack.addArrangedSubview(onceBtn)
-        makeWindow("微信扫码-配对C叉叉", stack, width: 400, height: 540)
+        makeWindow("微信扫码 · 配对C叉叉", stack, width: 400, height: 540)
     }
 
     @objc func copyPermLink(_ sender: NSButton) {

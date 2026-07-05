@@ -32,7 +32,7 @@ function harness() {
   const deps = makeDeps({
     configPath: join(dir, "daemon.json"),
     launchAgentsDir: join(dir, "LaunchAgents"),
-    appRoot: "/Applications/Codex-ZH.app",
+    appRoot: "/Applications/Codex-叉叉.app",
     homeDir: dir,
     uid: 501,
     runLaunchctl: (args) => {
@@ -59,9 +59,9 @@ test("buildPlist 生成合法结构（string/bool/array/dict/integer）", () => 
 });
 
 test("bundlePaths 指向 bundle 内 node/codex/daemon", () => {
-  const b = bundlePaths("/Applications/Codex-ZH.app");
-  assert.equal(b.node, "/Applications/Codex-ZH.app/Contents/Resources/cua_node/bin/node");
-  assert.equal(b.codexCli, "/Applications/Codex-ZH.app/Contents/Resources/codex");
+  const b = bundlePaths("/Applications/Codex-叉叉.app");
+  assert.equal(b.node, "/Applications/Codex-叉叉.app/Contents/Resources/cua_node/bin/node");
+  assert.equal(b.codexCli, "/Applications/Codex-叉叉.app/Contents/Resources/codex");
   assert.ok(b.daemonMain.endsWith("codex-zh/remote/daemon/src/main.mjs"));
   assert.ok(b.menuBin.endsWith("codex-zh/bin/CodexZhRemoteMenu"));
 });
@@ -84,7 +84,7 @@ test("enable 只装 daemon plist、设置 codexCommand、bootstrap 一次", () =
     assert.ok(!existsSync(join(h.dir, "LaunchAgents", `${MENU_LABEL}.plist`)), "不应再装菜单 agent");
     // codexCommand 指向 bundle 内 CLI（根治版本偏差）
     const config = loadOrCreateConfig(h.deps.configPath);
-    assert.equal(config.codexCommand, "/Applications/Codex-ZH.app/Contents/Resources/codex");
+    assert.equal(config.codexCommand, "/Applications/Codex-叉叉.app/Contents/Resources/codex");
     // 只 bootstrap daemon
     const bootstraps = h.calls.filter((c) => c[0] === "bootstrap");
     assert.equal(bootstraps.length, 1);

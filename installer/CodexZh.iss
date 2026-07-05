@@ -1,4 +1,4 @@
-#define MyAppName "Codex-ZH"
+#define MyAppName "Codex-叉叉"
 #ifndef MyAppVersion
   #define MyAppVersion "0.1.1"
 #endif
@@ -16,9 +16,9 @@
 AppId={{6C6DA7B7-7837-4875-9EC1-C0B82624D3DF}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
-AppPublisher=Codex-ZH
+AppPublisher=Codex-叉叉
 DefaultDirName={autopf}\Codex-ZH
-DefaultGroupName=Codex-ZH
+DefaultGroupName=Codex-叉叉
 DisableProgramGroupPage=yes
 SetupIconFile={#SourceRoot}\app\resources\icon.ico
 UninstallDisplayIcon={app}\app\resources\icon.ico
@@ -34,15 +34,27 @@ ArchitecturesInstallIn64BitMode=x64
 Source: "{#SourceRoot}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{group}\Codex-ZH"; Filename: "{app}\CodexZhLauncher.exe"; WorkingDir: "{app}"; IconFilename: "{app}\app\resources\icon.ico"
+Name: "{group}\Codex-叉叉"; Filename: "{app}\CodexZhLauncher.exe"; WorkingDir: "{app}"; IconFilename: "{app}\app\resources\icon.ico"
 Name: "{group}\Codex 中转站配置"; Filename: "{app}\CodexZhLauncher.exe"; Parameters: "--configure"; WorkingDir: "{app}"; IconFilename: "{app}\app\resources\icon.ico"
-Name: "{autodesktop}\Codex-ZH"; Filename: "{app}\CodexZhLauncher.exe"; WorkingDir: "{app}"; IconFilename: "{app}\app\resources\icon.ico"; Tasks: desktopicon
+Name: "{group}\手机远程接管"; Filename: "{app}\CodexZhTray.exe"; Parameters: """{app}\app\resources\cua_node\bin\node.exe"" ""{app}\launcher\win\remote-backend.mjs"""; WorkingDir: "{app}"; IconFilename: "{app}\app\resources\icon.ico"
+Name: "{autodesktop}\Codex-叉叉"; Filename: "{app}\CodexZhLauncher.exe"; WorkingDir: "{app}"; IconFilename: "{app}\app\resources\icon.ico"; Tasks: desktopicon
 
 [Tasks]
 Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional icons:"
 
 [InstallDelete]
 Type: files; Name: "{group}\Codex-ZH Config.lnk"
+; Remove shortcuts created under the old "Codex-ZH" display name so a rename upgrade
+; does not leave duplicate Start Menu / desktop icons.
+Type: files; Name: "{autoprograms}\Codex-ZH\Codex-ZH.lnk"
+Type: files; Name: "{autoprograms}\Codex-ZH\Codex 中转站配置.lnk"
+Type: files; Name: "{autoprograms}\Codex-ZH\手机远程接管.lnk"
+Type: filesandordirs; Name: "{autoprograms}\Codex-ZH"
+Type: files; Name: "{autodesktop}\Codex-ZH.lnk"
 
 [Run]
 Filename: "{app}\CodexZhLauncher.exe"; Parameters: "--no-launch"; WorkingDir: "{app}"; Flags: runhidden
+
+[UninstallRun]
+; Remove the Remote keepalive scheduled task (created on demand by "enable"); ignore if absent.
+Filename: "{sys}\schtasks.exe"; Parameters: "/Delete /TN CodexZhRemote /F"; Flags: runhidden; RunOnceId: "DelCodexZhRemoteTask"
