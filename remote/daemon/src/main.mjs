@@ -6,6 +6,7 @@
 import { writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { parseArgs } from "node:util";
+import { pathToFileURL } from "node:url";
 
 import { AppServer } from "./app-server.mjs";
 import { ClientSession } from "./client-session.mjs";
@@ -25,7 +26,7 @@ import { Notifier, redact } from "./notify.mjs";
 import { PowerManager } from "./power.mjs";
 import { RelayLink } from "./relay-link.mjs";
 import { SessionHub } from "./session-hub.mjs";
-import { resolve as resolvePath } from "node:path";
+import { resolve as resolvePath, sep as pathSep } from "node:path";
 
 function log(message) {
   console.log(`[${new Date().toISOString()}] ${message}`);
@@ -138,7 +139,9 @@ export async function startDaemon({ configPath, overrides = {} }) {
       const target = resolvePath(cwd);
       return allow.some((base) => {
         const b = resolvePath(base);
-        return target === b || target.startsWith(`${b}/`);
+        // 用平台分隔符判断子目录归属：Windows 上 resolvePath 返回反斜杠路径，
+        // 写死 "/" 会导致除完全相等外的子目录一律匹配失败，白名单形同虚设。
+        return target === b || target.startsWith(`${b}${pathSep}`);
       });
     },
   };
@@ -347,7 +350,11 @@ async function main() {
   process.exit(1);
 }
 
-const isDirectRun = process.argv[1] && import.meta.url.endsWith(process.argv[1].split("/").pop());
+// 入口判定：比较 import.meta.url 与 argv[1] 的 file:// URL。
+// 不能用 split("/") 取文件名——Windows 路径是反斜杠，切不出来会导致判定恒为 false，
+// 于是 main() 永不执行、进程静默退出 0（Windows 上 daemon「跑了但什么都没发生」的根因）。
+const isDirectRun =
+  process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
 if (isDirectRun) {
   main().catch((err) => {
     console.error(err.message);
