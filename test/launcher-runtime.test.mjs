@@ -172,6 +172,24 @@ test("installed shortcuts use native GUI launcher instead of PowerShell", () => 
   assert.doesNotMatch(installer, /\[Icons\][\s\S]*Filename: "\{sys\}\\WindowsPowerShell\\v1\.0\\powershell\.exe"/u);
 });
 
+test("installer stops holding processes before extraction to avoid DeleteFile code 5", () => {
+  // Upgrade installs must not fail with "拒绝访问 / DeleteFile failed; code 5" because a
+  // running codex.exe or the Remote daemon still holds app\resources\codex.exe.
+  // Built-in Restart Manager prompt is disabled; we handle closing ourselves.
+  assert.match(installer, /^CloseApplications=no$/mu);
+  assert.match(installer, /function PrepareToInstall/u);
+  assert.match(installer, /procedure StopCodexProcesses/u);
+  assert.match(installer, /\/End \/TN CodexZhRemote/u);
+  assert.match(installer, /taskkill\.exe'\), '\/F \/IM codex\.exe \/T'/u);
+  assert.match(installer, /taskkill\.exe'\), '\/F \/IM CodexZhTray\.exe \/T'/u);
+  assert.match(installer, /taskkill\.exe'\), '\/F \/IM CodexZhLauncher\.exe \/T'/u);
+  // Only the bundled in-dir node daemon is killed — never the user's own Node.
+  assert.match(installer, /\$_\.Name -eq ''node\.exe''/u);
+  assert.match(installer, /\$_\.ExecutablePath -like/u);
+  // Uninstall mirrors the same cleanup before file removal.
+  assert.match(installer, /\[UninstallRun\][\s\S]*\/F \/IM codex\.exe \/T/u);
+});
+
 test("ASAR customization replaces the transparent black startup loader", () => {
   assert.match(customizer, /patchStartupLoaderLightTheme/u);
   assert.match(customizer, /--startup-background: #f7f7f4;/u);

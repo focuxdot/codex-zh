@@ -29,6 +29,12 @@ SolidCompression=yes
 WizardStyle=modern
 ArchitecturesAllowed=x64
 ArchitecturesInstallIn64BitMode=x64
+; Disable the built-in Restart Manager "close applications" prompt. codex.exe is a
+; console app and the bundled daemon is a background node.exe — neither responds to
+; RM's graceful shutdown, so RM either shows a confusing English prompt (listing
+; "Node.js JavaScript Runtime") or fails to close them, leaving "DeleteFile failed;
+; code 5". We force-close them ourselves in PrepareToInstall instead.
+CloseApplications=no
 
 [Files]
 Source: "{#SourceRoot}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -56,5 +62,57 @@ Type: files; Name: "{autodesktop}\Codex-ZH.lnk"
 Filename: "{app}\CodexZhLauncher.exe"; Parameters: "--no-launch"; WorkingDir: "{app}"; Flags: runhidden
 
 [UninstallRun]
+; Stop holding processes before file removal so uninstall does not hit the same
+; "拒绝访问 / DeleteFile failed; code 5" lock on codex.exe / the daemon node.exe.
+Filename: "{sys}\schtasks.exe"; Parameters: "/End /TN CodexZhRemote"; Flags: runhidden; RunOnceId: "EndCodexZhRemoteTask"
+Filename: "{sys}\taskkill.exe"; Parameters: "/F /IM codex.exe /T"; Flags: runhidden; RunOnceId: "KillCodexCli"
+Filename: "{sys}\taskkill.exe"; Parameters: "/F /IM CodexZhTray.exe /T"; Flags: runhidden; RunOnceId: "KillCodexTray"
+Filename: "{sys}\taskkill.exe"; Parameters: "/F /IM CodexZhLauncher.exe /T"; Flags: runhidden; RunOnceId: "KillCodexLauncher"
 ; Remove the Remote keepalive scheduled task (created on demand by "enable"); ignore if absent.
 Filename: "{sys}\schtasks.exe"; Parameters: "/Delete /TN CodexZhRemote /F"; Flags: runhidden; RunOnceId: "DelCodexZhRemoteTask"
+
+[Code]
+// Upgrade installs fail with "DeleteFile failed; code 5 / 拒绝访问" when the old
+// app\resources\codex.exe (or the Remote daemon pinned to it) is still running and
+// holds a file handle. Windows Restart Manager cannot close these console/tray
+// processes because they are not RM-aware, so we stop them ourselves before any
+// file is extracted. Runs after the wizard, before [Files] extraction.
+procedure StopCodexProcesses;
+var
+  ResultCode: Integer;
+  AppDir, PsCmd: String;
+begin
+  // End the running Remote keepalive task instance (it respawns codex.exe / node.exe).
+  Exec(ExpandConstant('{sys}\schtasks.exe'), '/End /TN CodexZhRemote', '',
+       SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  // Kill the CLI, tray and launcher by image name (/T also drops their children).
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM codex.exe /T', '',
+       SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM CodexZhTray.exe /T', '',
+       SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM CodexZhLauncher.exe /T', '',
+       SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  // Kill only node.exe processes launched from inside the install dir (the bundled
+  // cua_node daemon / tray backend) — never the user's own Node installs.
+  AppDir := ExpandConstant('{app}');
+  if AppDir <> '' then
+  begin
+    // Single quotes only inside -Command so no double quotes nest in the outer "...".
+    PsCmd :=
+      'Get-CimInstance Win32_Process | Where-Object { ' +
+      '$_.Name -eq ''node.exe'' -and $_.ExecutablePath -and ' +
+      '$_.ExecutablePath -like ''' + AppDir + '\*'' } | ' +
+      'ForEach-Object { try { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue } catch {} }';
+    Exec('powershell.exe',
+         '-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "' + PsCmd + '"',
+         '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  end;
+end;
+
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+begin
+  StopCodexProcesses;
+  // Give Windows a moment to release the file handles before extraction begins.
+  Sleep(1200);
+  Result := '';
+end;
