@@ -37,8 +37,9 @@ test("generateDownloadBlock gives non-technical users a direct Windows installer
 
   assert.match(block, /Windows 10 \/ Windows 11（64 位）/u);
   assert.match(block, /下载 Codex-叉叉 0\.1\.1 Windows x64 安装包/u);
-  assert.match(block, /不要下载 GitHub 页面里的 `Source code`/u);
-  assert.match(block, /54aadeb761320de0267a5636552ca1df90488b449f5c9a96781c92a8d6114651/u);
+  // 下载区已精简（见「docs: 精简下载区」）：不再内联 Source code 警告与 sha256 校验和。
+  assert.doesNotMatch(block, /Source code/u);
+  assert.doesNotMatch(block, /54aadeb761320de0267a5636552ca1df90488b449f5c9a96781c92a8d6114651/u);
 });
 
 test("generateDownloadBlock renders a macOS arm64 dmg row when a dmg asset exists", () => {
@@ -57,7 +58,8 @@ test("generateDownloadBlock renders a macOS arm64 dmg row when a dmg asset exist
   assert.match(block, /macOS（Apple 芯片 \/ arm64）/u);
   assert.match(block, /下载 Codex-叉叉 0\.1\.2 macOS arm64 安装包/u);
   assert.match(block, /Codex-ZH-0\.1\.2-mac-arm64\.dmg/u);
-  assert.match(block, /97730f8af1815088f88efb9dba009925805c9da8ae92fc54d6bd13f944a538f4/u);
+  // 精简后下载区不再内联 dmg 的 sha256 校验和。
+  assert.doesNotMatch(block, /97730f8af1815088f88efb9dba009925805c9da8ae92fc54d6bd13f944a538f4/u);
   // Both platforms present, so neither should say 暂不提供.
   assert.doesNotMatch(block, /macOS \| 暂不提供/u);
 });
