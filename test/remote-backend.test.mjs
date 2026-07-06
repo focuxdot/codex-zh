@@ -94,6 +94,28 @@ test("enable 只装 daemon plist、设置 codexCommand、bootstrap 一次", () =
   }
 });
 
+test("enable：bootstrap 失败时回滚 plist、返回 error，不谎报已启用", () => {
+  const h = harness();
+  try {
+    // 让 launchctl bootstrap 失败（bootout/list 照常成功）
+    h.deps.runLaunchctl = (args) => {
+      h.calls.push(args);
+      if (args[0] === "list") return { status: 0, stdout: "", stderr: "" };
+      if (args[0] === "bootstrap") return { status: 5, stdout: "", stderr: "Load failed: 5: Input/output error" };
+      return { status: 0, stdout: "", stderr: "" };
+    };
+    const res = enable(h.deps);
+    assert.equal(res.ok, false);
+    assert.equal(res.enabled, false);
+    assert.match(res.error, /Load failed/);
+    // 回滚：plist 不残留，isEnabled/status 与返回值一致（都为未启用）
+    assert.ok(!existsSync(join(h.dir, "LaunchAgents", `${DAEMON_LABEL}.plist`)));
+    assert.equal(status(h.deps).enabled, false);
+  } finally {
+    h.cleanup();
+  }
+});
+
 test("status 反映启用/运行/设备数", () => {
   const h = harness();
   try {

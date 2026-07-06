@@ -149,7 +149,15 @@ export function enable(deps) {
   // 只装 daemon agent（网络暴露的部分）。菜单由启动器按需拉起，不常驻。
   deps.runLaunchctl(["bootout", `gui/${deps.uid}/${DAEMON_LABEL}`]); // 清旧实例，忽略失败
   const res = deps.runLaunchctl(["bootstrap", `gui/${deps.uid}`, plistPath(deps, DAEMON_LABEL)]);
-  if (res.status !== 0 && res.stderr) deps.log(`bootstrap ${DAEMON_LABEL}: ${res.stderr.trim()}`);
+  if (res.status !== 0) {
+    // bootstrap 失败要如实上报（对齐 Windows enable 的 /Create 失败路径）：回滚刚写的 plist，
+    // 保持 enable 原子性——要么启用且 daemon 在跑，要么什么都没变。否则 isEnabled（看 plist 是否
+    // 存在）会谎报「已启用」，且托盘 doPair 的「daemon 起不来就别出码」守卫拿不到 error、照样出无效码。
+    const msg = String(res.stderr || res.stdout || "launchctl bootstrap 失败").trim();
+    deps.log(`bootstrap ${DAEMON_LABEL}: ${msg}`);
+    rmSync(plistPath(deps, DAEMON_LABEL), { force: true });
+    return { ok: false, enabled: false, error: msg };
+  }
   return { ok: true, enabled: true };
 }
 

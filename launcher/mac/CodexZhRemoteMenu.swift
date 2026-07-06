@@ -1,8 +1,8 @@
 // Codex-ZH 远程接管 —— 菜单栏控制程序（LSUIElement / accessory）。
 //
 // 与 CodexZhConfig.swift 一致：纯视图，所有逻辑 shell 到 Node 后端 remote-backend.mjs
-// （argv 子命令进，单个 JSON 出）。状态图标 + 下拉菜单：启用/停用、扫码配对（QR）、
-// 已配对设备、通知设置。QR 用 CoreImage 本地生成，无第三方依赖。
+// （argv 子命令进，单个 JSON 出）。状态图标 + 下拉菜单：扫码配对（QR，未开启时点它即隐式
+// 开启远程）、已配对设备、通知设置、停用。QR 用 CoreImage 本地生成，无第三方依赖。
 //
 // Args: CodexZhRemoteMenu <nodePath> <backendScript>
 
@@ -146,7 +146,7 @@ final class MenuController: NSObject, NSMenuDelegate {
         let devices = st["deviceCount"] as? Int ?? 0
 
         let stateText: String
-        if !enabled { stateText = "远程未启用" }
+        if !enabled { stateText = "○ 远程未开启" }
         else if running { stateText = "● 远程运行中" }
         else { stateText = "⚠ 已启用但未运行" }
         let head = NSMenuItem(title: stateText, action: nil, keyEquivalent: "")
@@ -155,6 +155,7 @@ final class MenuController: NSObject, NSMenuDelegate {
         if enabled { menu.addItem(withTitle: "已配对设备：\(devices)", action: nil, keyEquivalent: "").isEnabled = false }
         menu.addItem(.separator())
 
+        // 「扫码配对」两态都在：未开启时点它即隐式开启远程（见 doPair），配对与启用合并为一步。
         if enabled {
             add(menu, "扫码配对…", #selector(doPair))
             add(menu, "已配对设备…", #selector(doDevices))
@@ -162,10 +163,11 @@ final class MenuController: NSObject, NSMenuDelegate {
             menu.addItem(.separator())
             add(menu, "停用远程", #selector(doDisable))
         } else {
-            add(menu, "启用手机远程接管", #selector(doEnable))
+            // 未开启态极简：只暴露入口动作，其余（设备/通知/停用）开启后才有意义
+            add(menu, "扫码配对手机…", #selector(doPair))
         }
         menu.addItem(.separator())
-        add(menu, "退出（不影响远程运行）", #selector(doQuit))
+        add(menu, enabled ? "退出托盘（远程继续运行）" : "退出托盘", #selector(doQuit))
     }
 
     func add(_ menu: NSMenu, _ title: String, _ sel: Selector) {
@@ -174,19 +176,19 @@ final class MenuController: NSObject, NSMenuDelegate {
         menu.addItem(item)
     }
 
-    @objc func doEnable() {
-        let res = backend(["enable"])
-        if res["error"] != nil { alert("启用失败", "\(res["error"]!)") }
-        else { alert("已启用", "手机远程接管已开启并设为开机自启。点菜单里的「扫码配对」用手机连接。") }
-        refreshIcon(status())
-    }
-
     @objc func doDisable() {
         backend(["disable"])
         refreshIcon(status())
     }
 
+    // 扫码 = 开启。未启用时先隐式开启远程（装自启 + 拉 daemon），daemon 在用户扫码的
+    // 几秒间隙里完成 relay 预热；已启用则直接出码，不重启 daemon（避免打断在连的会话）。
     @objc func doPair() {
+        if !(status()["enabled"] as? Bool ?? false) {
+            let en = backend(["enable"])
+            if en["error"] != nil { alert("开启失败", "\(en["error"]!)"); return } // daemon 起不来就别出码
+            refreshIcon(status())
+        }
         let res = backend(["pair"])
         guard let url = res["url"] as? String else { alert("配对失败", "\(res["error"] ?? "未知错误")"); return }
         showQR(url)
@@ -228,6 +230,11 @@ final class MenuController: NSObject, NSMenuDelegate {
         // 标题、说明、按钮都用系统语义色（labelColor 等），自动跟随系统明暗主题。
         let title = NSTextField(labelWithString: "微信扫码 · 配对C叉叉")
         title.font = .boldSystemFont(ofSize: 20)
+
+        // 诚实披露：点「扫码配对」已隐式开启远程，让「远程现在是开着的」这件事对用户可见。
+        let statusLabel = NSTextField(labelWithString: "● 远程已开启")
+        statusLabel.textColor = .secondaryLabelColor
+        statusLabel.font = .systemFont(ofSize: 13)
 
         // 二维码垫一张恒定白底卡片（带留白/圆角）：CIQRCodeGenerator 出的是黑码透明底，
         // 暗色窗口下会"黑底黑码"扫不出；白卡保证明暗两种模式下都清晰可扫。
@@ -275,6 +282,8 @@ final class MenuController: NSObject, NSMenuDelegate {
         onceBtn.font = .systemFont(ofSize: 14)
 
         stack.addArrangedSubview(title)
+        stack.addArrangedSubview(statusLabel)
+        stack.setCustomSpacing(10, after: title)
         stack.addArrangedSubview(qrCard)
         stack.addArrangedSubview(note)
         stack.addArrangedSubview(copyBtn)

@@ -1,8 +1,8 @@
 // Codex-ZH Windows 托盘远程控制器 —— 对齐 macOS 菜单栏 app（CodexZhRemoteMenu.swift）。
 //
 // 纯视图：每个操作都 shell 出到 Node 后端 launcher\win\remote-backend.mjs
-//（argv 子命令进、单个 JSON 出）。系统托盘图标（三态）+ 右键菜单：启用/停用、
-// 扫码配对（QR）、已配对设备、通知设置。二维码 BMP 由后端渲染，这里只显示。
+//（argv 子命令进、单个 JSON 出）。系统托盘图标（三态）+ 右键菜单：扫码配对（QR，未开启时
+// 点它即隐式开启远程）、已配对设备、通知设置、停用。二维码 BMP 由后端渲染，这里只显示。
 //
 // 用法（由 CodexZhLauncher 启动 Codex 时拉起）：
 //   CodexZhTray.exe <nodePath> <backendMjsPath>
@@ -246,11 +246,12 @@ namespace CodexZh
             var m = tray.ContextMenuStrip;
             m.Items.Clear();
 
-            string stateText = !enabled ? "远程未启用" : (running ? "● 远程运行中" : "⚠ 已启用但未运行");
+            string stateText = !enabled ? "○ 远程未开启" : (running ? "● 远程运行中" : "⚠ 已启用但未运行");
             AddInfo(m, stateText);
             if (enabled) AddInfo(m, "已配对设备：" + deviceCount);
             m.Items.Add(new ToolStripSeparator());
 
+            // 「扫码配对」两态都在：未开启时点它即隐式开启远程（见 DoPair），配对与启用合并为一步。
             if (enabled)
             {
                 AddItem(m, "扫码配对…", (s, e) => DoPair());
@@ -261,10 +262,11 @@ namespace CodexZh
             }
             else
             {
-                AddItem(m, "启用手机远程接管", (s, e) => DoEnable());
+                // 未开启态极简：只暴露入口动作，其余（设备/通知/停用）开启后才有意义
+                AddItem(m, "扫码配对手机…", (s, e) => DoPair());
             }
             m.Items.Add(new ToolStripSeparator());
-            AddItem(m, "退出（不影响远程运行）", (s, e) => DoQuit());
+            AddItem(m, enabled ? "退出托盘（远程继续运行）" : "退出托盘", (s, e) => DoQuit());
         }
 
         static void AddInfo(ContextMenuStrip m, string text)
@@ -280,20 +282,21 @@ namespace CodexZh
         }
 
         // —— 动作 ——
-        void DoEnable()
-        {
-            var res = Backend.Call("enable");
-            if (Backend.HasKey(res, "error")) Alert("启用失败", Backend.Str(res, "error"));
-            else Alert("已启用", "手机远程接管已开启并设为开机自启。点菜单里的「扫码配对」用手机连接。");
-            RefreshIcon(Backend.Call("status"));
-        }
         void DoDisable()
         {
             Backend.Call("disable");
             RefreshIcon(Backend.Call("status"));
         }
+        // 扫码 = 开启。未启用时先隐式开启远程（装自启 + 拉 daemon），daemon 在用户扫码的
+        // 几秒间隙里完成 relay 预热；已启用则直接出码，不重启 daemon（避免打断在连的会话）。
         void DoPair()
         {
+            if (!Backend.Bool(Backend.Call("status"), "enabled"))
+            {
+                var en = Backend.Call("enable");
+                if (Backend.HasKey(en, "error")) { Alert("开启失败", Backend.Str(en, "error")); return; } // daemon 起不来就别出码
+                RefreshIcon(Backend.Call("status"));
+            }
             var res = Backend.Call("pair");
             string url = Backend.Str(res, "url");
             if (url == null) { Alert("配对失败", Backend.Str(res, "error") ?? "未知错误"); return; }
@@ -322,12 +325,12 @@ namespace CodexZh
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 1,
-                RowCount = 6,
+                RowCount = 7,
                 AutoScroll = true,
                 Padding = new Padding(26, 20, 26, 20),
             };
             root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
-            for (int i = 0; i < 6; i++) root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            for (int i = 0; i < 7; i++) root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             form.Controls.Add(root);
 
             Action<Control, int> addCentered = (c, bottom) =>
@@ -337,7 +340,10 @@ namespace CodexZh
                 root.Controls.Add(c);
             };
 
-            addCentered(new Label { Text = "微信扫码 · 配对C叉叉", Font = FontTitle, AutoSize = true }, 12);
+            addCentered(new Label { Text = "微信扫码 · 配对C叉叉", Font = FontTitle, AutoSize = true }, 6);
+
+            // 诚实披露：点「扫码配对」已隐式开启远程，让「远程现在是开着的」这件事对用户可见。
+            addCentered(new Label { Text = "● 远程已开启", ForeColor = Color.Gray, AutoSize = true }, 12);
 
             // 二维码白底卡片（后端已白底黑点；再垫白底防深色主题不可扫）
             var card = new Panel { Width = 320, Height = 320, BackColor = Color.White };
