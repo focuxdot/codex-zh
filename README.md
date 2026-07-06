@@ -55,12 +55,12 @@ Codex 跑长任务时，你不必守在电脑前：
 ## 下载
 
 <!-- codex-zh-downloads:start -->
-当前最新版：v0.3.0
+当前最新版：v0.4.0
 
 | 你的系统 | 下载哪个版本 |
 | --- | --- |
-| Windows 10 / Windows 11（64 位） | [下载 Codex-叉叉 0.3.0 Windows x64 安装包](https://github.com/focuxdot/codex-zh/releases/download/v0.3.0/Codex-26.608.1337.0%2BZH-0.3.0-win-x64.exe) |
-| macOS（Apple 芯片 / arm64） | [下载 Codex-叉叉 0.3.0 macOS arm64 安装包](https://github.com/focuxdot/codex-zh/releases/download/v0.3.0/Codex-ZH-0.3.0-mac-arm64.dmg) |
+| Windows 10 / Windows 11（64 位） | [下载 Codex-叉叉 0.4.0 Windows x64 安装包](https://github.com/focuxdot/codex-zh/releases/download/v0.4.0/Codex-26.608.1337.0%2BZH-0.4.0-win-x64.exe) |
+| macOS（Apple 芯片 / arm64） | [下载 Codex-叉叉 0.4.0 macOS arm64 安装包](https://github.com/focuxdot/codex-zh/releases/download/v0.4.0/Codex-ZH-0.4.0-mac-arm64.dmg) |
 
 macOS 版打开时如果提示文件“已损坏”或无法安装，属正常现象，按[常见问题里的说明](#macos-打开时提示已损坏或无法验证开发者)处理即可。
 <!-- codex-zh-downloads:end -->
