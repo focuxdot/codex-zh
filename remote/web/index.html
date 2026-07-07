@@ -934,6 +934,7 @@ class Session {
     this.hbSupported = false;   // relay 是否应答 hb（收到首个 pong 后置真）
     this.lastPong = 0;
     this.lastPingAt = 0;
+    this.relayDaemonEpoch = null; // relay 侧 daemon 连接纪元；变化表示 daemon 已重置，须重握手
     this.pingTimer = null;
     this.onNotify = () => {};
     this.onStatus = () => {};   // (patch) 链路状态增量：{link?, daemon?, lastSeen?}
@@ -1136,6 +1137,14 @@ class Session {
       return;
     }
     if (frame.t === "status") {
+      if (frame.online && Number.isSafeInteger(frame.epoch)) {
+        const previousEpoch = this.relayDaemonEpoch;
+        this.relayDaemonEpoch = frame.epoch;
+        if (!this.awaitingAuth && previousEpoch !== null && previousEpoch !== frame.epoch) {
+          this.#rebuild();
+          return;
+        }
+      }
       // 电脑是否可用以"鉴权成功"为准，而非中继单方面的 online：电脑断网后中继要过一会
       // 才察觉、期间仍报 online。鉴权确认前，online 只当"未知"，避免标绿却其实连不上。
       const daemon = (this.awaitingAuth && frame.online) ? null : frame.online;

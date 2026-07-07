@@ -92,6 +92,7 @@ export function upgradeConnection(req, socket) {
 
   let buffer = Buffer.alloc(0);
   let fragments = [];
+  let fragmentBytes = 0; // 分片累计上限：单帧限 256KiB，但无限续片一样能耗尽内存
   let fragmentOpcode = 0;
   let closed = false;
 
@@ -110,10 +111,13 @@ export function upgradeConnection(req, socket) {
         buffer = buffer.subarray(frame.consumed);
         switch (frame.opcode) {
           case 0x0: // continuation
+            fragmentBytes += frame.payload.length;
+            if (fragmentBytes > MAX_FRAME_BYTES) throw new Error("分片总量超限");
             fragments.push(frame.payload);
             if (frame.fin) {
               const whole = Buffer.concat(fragments);
               fragments = [];
+              fragmentBytes = 0;
               if (fragmentOpcode === 0x1) conn.onText(whole.toString("utf8"));
             }
             break;
@@ -123,6 +127,7 @@ export function upgradeConnection(req, socket) {
               if (frame.opcode === 0x1) conn.onText(frame.payload.toString("utf8"));
             } else {
               fragments = [frame.payload];
+              fragmentBytes = frame.payload.length;
               fragmentOpcode = frame.opcode;
             }
             break;

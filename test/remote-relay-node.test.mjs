@@ -46,18 +46,20 @@ test("relay 撮合：daemon 与 client 互通、状态广播", async (t) => {
   const client = new WebSocket(`${base}/client/${daemonId}`);
   const clientQueue = makeQueue(client, received.client);
   await once2(client, "open");
-  // 断言失败也保证关闭 socket/server，否则遗留句柄会让进程吊死到测试超时
-  t.after(() => { client.close(); server.close(); });
 
   // daemon 未上线时 client 收到 offline 状态（lastSeen 初始为 null）
   assert.deepEqual(await clientQueue.next(), { t: "status", online: false, lastSeen: null });
 
-  const daemon = new WebSocket(`${base}/daemon/${daemonId}`);
+  let daemon;
+  // 断言失败也保证关闭 socket/server，否则遗留句柄会让进程吊死到测试超时
+  t.after(() => { daemon?.close(); client.close(); server.close(); });
+
+  daemon = new WebSocket(`${base}/daemon/${daemonId}`);
   const daemonQueue = makeQueue(daemon, received.daemon);
   await once2(daemon, "open");
 
   // daemon 上线广播（在线态不带 lastSeen） + open 帧
-  assert.deepEqual(await clientQueue.next(), { t: "status", online: true });
+  assert.deepEqual(await clientQueue.next(), { t: "status", online: true, epoch: 1 });
   const openFrame = await daemonQueue.next();
   assert.equal(openFrame.t, "open");
   const cid = openFrame.cid;

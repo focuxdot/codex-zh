@@ -20,7 +20,7 @@ export function createRelayServer({ log = () => {} } = {}) {
   function room(daemonId) {
     let r = rooms.get(daemonId);
     if (!r) {
-      r = { daemon: null, clients: new Map(), nextCid: 1, lastSeen: null };
+      r = { daemon: null, clients: new Map(), nextCid: 1, lastSeen: null, epoch: 0 };
       rooms.set(daemonId, r);
     }
     return r;
@@ -50,9 +50,11 @@ export function createRelayServer({ log = () => {} } = {}) {
     if (target.role === "daemon") {
       r.daemon?.close(); // 新连接顶掉旧连接
       r.daemon = conn;
+      // daemon 连接纪元：客户端靠 epoch 变化得知 daemon 侧连接态已重置（顶替路径无 offline 边沿）
+      r.epoch += 1;
       log(`daemon 上线: ${target.daemonId}`);
       for (const [cid, client] of r.clients) {
-        client.send(JSON.stringify({ t: "status", online: true }));
+        client.send(JSON.stringify({ t: "status", online: true, epoch: r.epoch }));
         conn.send(JSON.stringify({ t: "open", cid })); // 补发已在线 client 的 open
       }
       conn.onText = (text) => {
@@ -88,7 +90,12 @@ export function createRelayServer({ log = () => {} } = {}) {
     // client
     const cid = `c${r.nextCid++}`;
     r.clients.set(cid, conn);
-    conn.send(JSON.stringify({ t: "status", online: Boolean(r.daemon), lastSeen: r.lastSeen }));
+    conn.send(JSON.stringify({
+      t: "status",
+      online: Boolean(r.daemon),
+      lastSeen: r.lastSeen,
+      ...(r.daemon ? { epoch: r.epoch } : {}),
+    }));
     r.daemon?.send(JSON.stringify({ t: "open", cid }));
     conn.onText = (text) => {
       const frame = safeParse(text);

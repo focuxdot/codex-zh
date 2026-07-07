@@ -48,19 +48,27 @@ export class RelayRoom {
         }
       }
       this.#state.acceptWebSocket(serverEnd, ["daemon"]);
-      this.#broadcastToClients({ t: "status", online: true });
+      // daemon 连接纪元：每次（重）连接递增并随 status 广播。顶替路径不广播 offline
+      // （见 webSocketClose），客户端看不到 offline→online 边沿，只能靠 epoch 变化
+      // 得知"daemon 侧连接态已重置、须重握手重鉴权"。存 DO storage，跨休眠仍单调。
+      const epoch = ((await this.#state.storage.get("daemonEpoch")) ?? 0) + 1;
+      await this.#state.storage.put("daemonEpoch", epoch);
+      this.#broadcastToClients({ t: "status", online: true, epoch });
       for (const client of this.#state.getWebSockets("client")) {
         const cid = client.deserializeAttachment()?.cid;
         if (cid) serverEnd.send(JSON.stringify({ t: "open", cid })); // 补发已在线 client 的 open
       }
     } else {
-      const cid = `c${crypto.randomUUID().slice(0, 8)}`;
+      // 64 bit 随机：cid 是 daemon 侧路由键，撞号=两个客户端的帧互相串
+      // （E2E 兜底为解不开丢帧，但表现为莫名收不到应答），熵给足
+      const cid = `c${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`;
       this.#state.acceptWebSocket(serverEnd, ["client", `cid:${cid}`]);
       serverEnd.serializeAttachment({ cid });
       const online = this.#daemon() !== null;
       // lastSeen 存 DO storage，跨 hibernation/迁移仍可用
       const lastSeen = online ? null : ((await this.#state.storage.get("lastSeen")) ?? null);
-      serverEnd.send(JSON.stringify({ t: "status", online, lastSeen }));
+      const epoch = online ? ((await this.#state.storage.get("daemonEpoch")) ?? null) : null;
+      serverEnd.send(JSON.stringify({ t: "status", online, lastSeen, ...(epoch != null ? { epoch } : {}) }));
       this.#safeSend(this.#daemon(), JSON.stringify({ t: "open", cid }));
     }
     return new Response(null, { status: 101, webSocket: clientEnd });

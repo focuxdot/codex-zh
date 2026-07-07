@@ -1,0 +1,27 @@
+#!/bin/sh
+# Confirm the commit will be authored by the expected maintainer account.
+# Guards against committing under the wrong git user.name/user.email (this machine's
+# global git identity may differ from the maintainer account). Runs on every commit.
+#
+# Skips silently if no maintainer account is configured (fork/contributor clone).
+expected="$(git config codex-zh.githubAccount)"
+[ -z "$expected" ] && exit 0
+
+email="$(git config user.email)"
+name="$(git config user.name)"
+
+if [ -z "$email" ]; then
+  echo "pre-commit: refusing — git user.email is empty. Set it to the $expected account." >&2
+  exit 1
+fi
+
+# The maintainer's noreply email embeds the login (e.g. 76761194+focuxdot@users.noreply.github.com),
+# and user.name is the login itself. Require the account login to appear in one of them.
+case "$email$name" in
+  *"$expected"*) exit 0 ;;
+  *)
+    echo "pre-commit: refusing — identity ($name <$email>) does not match account '$expected'." >&2
+    echo "  Fix: git config user.name '$expected' && git config user.email '<$expected noreply email>'" >&2
+    exit 1
+    ;;
+esac

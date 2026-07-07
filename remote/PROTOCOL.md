@@ -17,7 +17,7 @@ WebSocket 端点：
 
 | 方向 | 帧 | 说明 |
 | --- | --- | --- |
-| relay → client | `{"t":"status","online":bool,"lastSeen":ms\|null}` | 连接建立时告知 daemon 是否在线；daemon 上下线时推送。`lastSeen` 为 daemon 最近一次离线时刻（毫秒时间戳），在线或未知时为 null/缺省（旧 relay 不发此字段） |
+| relay → client | `{"t":"status","online":bool,"lastSeen":ms\|null,"epoch":n}` | 连接建立时告知 daemon 是否在线；daemon 上下线时推送。`lastSeen` 为 daemon 最近一次离线时刻（毫秒时间戳），在线或未知时为 null/缺省（旧 relay 不发此字段）。`epoch` 仅在 `online:true` 时由新 relay 发送，每次 daemon（重）连接递增；client 发现已鉴权连接上的 epoch 变化后必须重连并重新鉴权 |
 | relay → daemon | `{"t":"open","cid":"..."}` | 有 client 接入；daemon（重）上线时对每个已在线 client 补发一次 |
 | client → relay | `{"t":"msg","data":{...}}` | data 为 E2E 信封（见 §2） |
 | relay → daemon | `{"t":"msg","cid":"...","data":{...}}` | 转发并标注来源 cid |
@@ -27,7 +27,7 @@ WebSocket 端点：
 | daemon → relay | `{"t":"close","cid":"..."}` | 要求 relay 断开该 client（如鉴权失败） |
 | daemon/client ↔ relay | `{"t":"hb"}` | 心跳，relay 原样回发。daemon 每 25s 一拍并验收回包（超 10s 判死链重连）；client 仅页面前台时每 25s 一拍做僵尸连接检测（旧 relay 不应答时 client 自动退化为不检测）。Worker 形态经 `setWebSocketAutoResponse` 在边缘应答（不唤醒 DO），发送串须与 `{"t":"hb"}` 逐字一致 |
 
-relay 不解析 `data` 内容。daemon 断开时，relay 向所有 client 推 `{"t":"status","online":false}` 并保持 client 连接，等 daemon 重连后推 `online:true`。
+relay 不解析 `data` 内容。daemon 断开时，relay 向所有 client 推 `{"t":"status","online":false}` 并保持 client 连接，等 daemon 重连后推带新 `epoch` 的 `online:true`。
 
 ## 2. 端到端加密信封
 
