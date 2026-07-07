@@ -35,6 +35,8 @@ function harness(overrides = {}) {
       return { status: 0, stdout: "", stderr: "" };
     },
     probePort: () => state.portOpen,
+    listProcesses: () => [],
+    killProcessTree: () => {},
     ...overrides,
   });
   return { dir, deps, calls, state, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
@@ -104,6 +106,37 @@ test("disable：End 再 Delete /F", () => {
     assert.ok(kinds.includes("/Delete"));
     const del = h.calls.find((c) => c[0] === "/Delete");
     assert.ok(del.includes(TASK_NAME) && del.includes("/F"));
+  } finally {
+    h.cleanup();
+  }
+});
+
+test("disable：兜底终止当前安装目录残留的 daemon 进程树", () => {
+  const killed = [];
+  const h = harness({
+    listProcesses: () => [
+      {
+        ProcessId: 101,
+        Name: "node.exe",
+        CommandLine: '"C:\\Program Files\\Codex-ZH\\app\\resources\\cua_node\\bin\\node.exe" "C:\\Program Files\\Codex-ZH\\remote\\daemon\\src\\main.mjs" start',
+      },
+      {
+        ProcessId: 102,
+        Name: "codex.exe",
+        CommandLine: "C:\\Program Files\\Codex-ZH\\app\\resources\\codex.exe app-server --listen ws://127.0.0.1:19271",
+      },
+      {
+        ProcessId: 201,
+        Name: "node.exe",
+        CommandLine: '"C:\\Program Files\\Other\\remote\\daemon\\src\\main.mjs" start',
+      },
+    ],
+    killProcessTree: (pid) => killed.push(pid),
+  });
+  try {
+    const res = disable(h.deps);
+    assert.equal(res.enabled, false);
+    assert.deepEqual(killed, [101]);
   } finally {
     h.cleanup();
   }

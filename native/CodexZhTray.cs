@@ -25,6 +25,9 @@ namespace CodexZh
         static string NodePath;
         static string BackendPath;
 
+        [DllImport("user32.dll")]
+        static extern bool SetProcessDPIAware();
+
         [STAThread]
         static void Main(string[] args)
         {
@@ -41,6 +44,7 @@ namespace CodexZh
             using (var mutex = new Mutex(true, "Global\\CodexZhRemoteTray", out created))
             {
                 if (!created) return;
+                try { SetProcessDPIAware(); } catch { }
                 Application.EnableVisualStyles();
                 Application.SetCompatibleTextRenderingDefault(false);
                 Application.Run(new TrayContext(NodePath, BackendPath));
@@ -201,11 +205,11 @@ namespace CodexZh
 
         // 共享字体：控件不负责释放赋给它的 Font，每次开窗新建会泄漏 GDI 字体对象。
         // 复用随进程存活的静态实例即可根治（无控件会去 Dispose 它们）。
-        static readonly Font FontBase = new Font("Microsoft YaHei", 9f);
-        static readonly Font FontTitle = new Font("Microsoft YaHei", 14, FontStyle.Bold);
-        static readonly Font FontSectionBold = new Font("Microsoft YaHei", 10, FontStyle.Bold);
-        static readonly Font FontRowName = new Font("Microsoft YaHei", 9.5f);
-        static readonly Font FontRowSub = new Font("Microsoft YaHei", 8f);
+        static readonly Font FontBase = new Font("Microsoft YaHei UI", 9f);
+        static readonly Font FontTitle = new Font("Microsoft YaHei UI", 13.5f, FontStyle.Bold);
+        static readonly Font FontSectionBold = new Font("Microsoft YaHei UI", 10f, FontStyle.Bold);
+        static readonly Font FontRowName = new Font("Microsoft YaHei UI", 9.5f);
+        static readonly Font FontRowSub = new Font("Microsoft YaHei UI", 8.5f);
 
         public TrayContext(string node, string backend)
         {
@@ -217,7 +221,7 @@ namespace CodexZh
                 Visible = true,
                 Icon = TrayIcons.Get(IconState.Disabled),
                 Text = "Codex-叉叉 远程",
-                ContextMenuStrip = new ContextMenuStrip(),
+                ContextMenuStrip = new ContextMenuStrip { Font = FontBase },
             };
             // 每次打开菜单前现取 status 重建（对齐 Mac menuNeedsUpdate，无定时器）。
             // 遵循 Windows 原生约定：仅右键弹菜单（左键不做处理）。
@@ -251,22 +255,24 @@ namespace CodexZh
             if (enabled) AddInfo(m, "已配对设备：" + deviceCount);
             m.Items.Add(new ToolStripSeparator());
 
-            // 「扫码配对」两态都在：未开启时点它即隐式开启远程（见 DoPair），配对与启用合并为一步。
+            // 「启动远程」用于已配对设备直接恢复连接；「扫码配对手机」仍会按需隐式启动远程。
             if (enabled)
             {
-                AddItem(m, "扫码配对…", (s, e) => DoPair());
-                AddItem(m, "已配对设备…", (s, e) => DoDevices());
-                AddItem(m, "通知设置…", (s, e) => DoNotify());
+                if (!running) AddItem(m, "启动远程", (s, e) => DoEnable());
+                AddItem(m, "扫码配对手机", (s, e) => DoPair());
+                AddItem(m, "已配对设备", (s, e) => DoDevices());
+                AddItem(m, "通知设置", (s, e) => DoNotify());
                 m.Items.Add(new ToolStripSeparator());
                 AddItem(m, "停用远程", (s, e) => DoDisable());
             }
             else
             {
-                // 未开启态极简：只暴露入口动作，其余（设备/通知/停用）开启后才有意义
-                AddItem(m, "扫码配对手机…", (s, e) => DoPair());
+                // 未开启态也保留单独启动入口：手机已配对时不必再打开二维码。
+                AddItem(m, "启动远程", (s, e) => DoEnable());
+                AddItem(m, "扫码配对手机", (s, e) => DoPair());
             }
             m.Items.Add(new ToolStripSeparator());
-            AddItem(m, enabled ? "退出托盘（远程继续运行）" : "退出托盘", (s, e) => DoQuit());
+            AddItem(m, "退出并停止远程", (s, e) => DoQuit());
         }
 
         static void AddInfo(ContextMenuStrip m, string text)
@@ -287,16 +293,29 @@ namespace CodexZh
             Backend.Call("disable");
             RefreshIcon(Backend.Call("status"));
         }
+        bool EnsureRemoteEnabled()
+        {
+            var st = Backend.Call("status");
+            if (Backend.Bool(st, "enabled") && Backend.Bool(st, "running")) return true;
+
+            var en = Backend.Call("enable");
+            if (Backend.HasKey(en, "error"))
+            {
+                Alert("开启失败", Backend.Str(en, "error"));
+                return false;
+            }
+            RefreshIcon(Backend.Call("status"));
+            return true;
+        }
+        void DoEnable()
+        {
+            if (EnsureRemoteEnabled()) Alert("远程已启动", "手机网页现在可以连接这台电脑。");
+        }
         // 扫码 = 开启。未启用时先隐式开启远程（装自启 + 拉 daemon），daemon 在用户扫码的
         // 几秒间隙里完成 relay 预热；已启用则直接出码，不重启 daemon（避免打断在连的会话）。
         void DoPair()
         {
-            if (!Backend.Bool(Backend.Call("status"), "enabled"))
-            {
-                var en = Backend.Call("enable");
-                if (Backend.HasKey(en, "error")) { Alert("开启失败", Backend.Str(en, "error")); return; } // daemon 起不来就别出码
-                RefreshIcon(Backend.Call("status"));
-            }
+            if (!EnsureRemoteEnabled()) return;
             var res = Backend.Call("pair");
             string url = Backend.Str(res, "url");
             if (url == null) { Alert("配对失败", Backend.Str(res, "error") ?? "未知错误"); return; }
@@ -310,6 +329,7 @@ namespace CodexZh
         void DoNotify() { ShowNotify(); }
         void DoQuit()
         {
+            Backend.Call("disable");
             tray.Visible = false;
             tray.Dispose();
             ExitThread();
@@ -318,7 +338,7 @@ namespace CodexZh
         // —— 扫码配对窗 ——
         void ShowQR(string url, string qrPath)
         {
-            var form = MakeWindow("微信扫码 · 配对C叉叉", 420, 620);
+            var form = MakeWindow("微信扫码 · 配对C叉叉", 480, 700);
             // 单列 TableLayoutPanel：每个控件 Anchor=None → 在列内水平居中。
             // （FlowLayoutPanel TopDown 只会靠左堆叠，无法居中。）
             var root = new TableLayoutPanel
@@ -327,7 +347,7 @@ namespace CodexZh
                 ColumnCount = 1,
                 RowCount = 7,
                 AutoScroll = true,
-                Padding = new Padding(26, 20, 26, 20),
+                Padding = new Padding(30, 22, 30, 22),
             };
             root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
             for (int i = 0; i < 7; i++) root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -346,8 +366,8 @@ namespace CodexZh
             addCentered(new Label { Text = "● 远程已开启", ForeColor = Color.Gray, AutoSize = true }, 12);
 
             // 二维码白底卡片（后端已白底黑点；再垫白底防深色主题不可扫）
-            var card = new Panel { Width = 320, Height = 320, BackColor = Color.White };
-            var pic = new PictureBox { Width = 288, Height = 288, Left = 16, Top = 16, SizeMode = PictureBoxSizeMode.Zoom };
+            var card = new Panel { Width = 300, Height = 300, BackColor = Color.White };
+            var pic = new PictureBox { Width = 268, Height = 268, Left = 16, Top = 16, SizeMode = PictureBoxSizeMode.Zoom };
             // 经流读入并拷成内存位图：Image.FromFile 会长期锁住临时 BMP（后端下次可能覆盖），
             // 且 PictureBox 不负责释放其 Image，故手动在关窗时 Dispose。
             try
@@ -364,13 +384,16 @@ namespace CodexZh
 
             addCentered(new Label { Text = "扫码链接长期有效，请勿轻易转发", ForeColor = Color.Gray, AutoSize = true }, 8);
 
-            var copyPerm = new Button { Text = MiddleTruncate(LinkForDisplay(url), 44), Width = 340, Height = 32, FlatStyle = FlatStyle.System };
-            copyPerm.Click += (s, e) => { Clipboard.SetText(url); Flash((Button)s, MiddleTruncate(LinkForDisplay(url), 44)); };
+            var linkPreview = new Label { Text = LinkForDisplay(url), Width = 390, Height = 24, TextAlign = ContentAlignment.MiddleCenter, AutoEllipsis = true };
+            addCentered(linkPreview, 4);
+
+            var copyPerm = new Button { Text = "复制配对链接", Width = 380, Height = 34, FlatStyle = FlatStyle.System };
+            copyPerm.Click += (s, e) => { Clipboard.SetText(url); Flash((Button)s, "复制配对链接"); };
             addCentered(copyPerm, 4);
 
             addCentered(new Label { Text = "↑ 点击链接即可复制到剪贴板", ForeColor = Color.Gray, AutoSize = true }, 16);
 
-            var copyOnce = new Button { Text = "复制邀请链接（一次性 · 5 分钟）", Width = 340, Height = 32, FlatStyle = FlatStyle.System };
+            var copyOnce = new Button { Text = "复制邀请链接（一次性 · 5 分钟）", Width = 380, Height = 34, FlatStyle = FlatStyle.System };
             copyOnce.Click += (s, e) =>
             {
                 var r = Backend.Call("pair-once");
@@ -387,8 +410,8 @@ namespace CodexZh
         // —— 已配对设备窗 ——
         void ShowDevices(Dictionary<string, object> res)
         {
-            var form = MakeWindow("已配对设备", 420, 480);
-            var root = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, Padding = new Padding(16), AutoScroll = true };
+            var form = MakeWindow("已配对设备", 480, 500);
+            var root = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, Padding = new Padding(20), AutoScroll = true };
             form.Controls.Add(root);
 
             object[] devices = (res != null && res.ContainsKey("devices")) ? res["devices"] as object[] : new object[0];
@@ -427,14 +450,14 @@ namespace CodexZh
                 else if (createdAt > 0) sub = "从未连接（配对于 " + FmtEpoch(createdAt) + "） · #" + id6;
                 else sub = "从未连接 · #" + id6;
 
-                var rowPanel = new Panel { Width = 372, Height = 46, Margin = new Padding(0, 0, 0, 6) };
-                var col = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, Left = 0, Top = 2, Width = 250, Height = 44, WrapContents = false };
+                var rowPanel = new Panel { Width = 420, Height = 50, Margin = new Padding(0, 0, 0, 6) };
+                var col = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, Left = 0, Top = 2, Width = 315, Height = 48, WrapContents = false };
                 col.Controls.Add(new Label { Text = title, AutoSize = true, Font = FontRowName });
                 col.Controls.Add(new Label { Text = sub, AutoSize = true, ForeColor = Color.Gray, Font = FontRowSub });
                 rowPanel.Controls.Add(col);
 
                 string devId = id;
-                var btn = new Button { Text = viewer ? "撤销" : "移除", Width = 72, Height = 28, Left = 290, Top = 8, FlatStyle = FlatStyle.System };
+                var btn = new Button { Text = viewer ? "撤销" : "移除", Width = 76, Height = 30, Left = 338, Top = 8, FlatStyle = FlatStyle.System };
                 btn.Click += (s, e) => { Backend.Call("revoke", devId); form.Close(); ShowDevices(Backend.Call("devices")); };
                 rowPanel.Controls.Add(btn);
                 root.Controls.Add(rowPanel);
@@ -443,7 +466,7 @@ namespace CodexZh
             if (unused > 0)
             {
                 root.Controls.Add(new Label { Text = "有 " + unused + " 条从未连接的链接（生成过但没被扫过）", ForeColor = Color.Gray, AutoSize = true, Margin = new Padding(0, 8, 0, 4) });
-                var prune = new Button { Text = "清理从未连接的链接（" + unused + "）", Width = 340, Height = 30, FlatStyle = FlatStyle.System };
+                var prune = new Button { Text = "清理从未连接的链接（" + unused + "）", Width = 400, Height = 32, FlatStyle = FlatStyle.System };
                 prune.Click += (s, e) =>
                 {
                     var confirm = MessageBox.Show("将作废所有生成过但从未被扫过的链接（可能是外泄/转发但没用的）。已连过的设备不受影响。", "清理从未连接的链接", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning);
@@ -463,20 +486,20 @@ namespace CodexZh
         static readonly string[] NotifyTypes = { "bark", "serverchan", "wecom", "dingtalk", "custom" };
         void ShowNotify()
         {
-            var form = MakeWindow("通知设置", 420, 460);
-            var root = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, Padding = new Padding(16), AutoScroll = true };
+            var form = MakeWindow("通知设置", 480, 480);
+            var root = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, Padding = new Padding(20), AutoScroll = true };
             form.Controls.Add(root);
 
             root.Controls.Add(new Label { Text = "添加通知渠道", Font = FontSectionBold, AutoSize = true, Margin = new Padding(0, 0, 0, 6) });
-            var combo = new ComboBox { Width = 340, DropDownStyle = ComboBoxStyle.DropDownList };
+            var combo = new ComboBox { Width = 400, DropDownStyle = ComboBoxStyle.DropDownList };
             combo.Items.AddRange(new object[] { "Bark", "Server酱", "企业微信", "钉钉", "自定义" });
             combo.SelectedIndex = 0;
             root.Controls.Add(combo);
-            var field = new TextBox { Width = 340, Margin = new Padding(0, 6, 0, 6) };
+            var field = new TextBox { Width = 400, Margin = new Padding(0, 6, 0, 6) };
             root.Controls.Add(field);
-            root.Controls.Add(new Label { Text = "Bark/Server酱 填 Key；其余填 Webhook URL", ForeColor = Color.Gray, AutoSize = true, Margin = new Padding(0, 0, 0, 6) });
+            root.Controls.Add(new Label { Text = "Bark/Server酱 填 Key；其余填 Webhook URL", ForeColor = Color.Gray, AutoSize = true, MaximumSize = new Size(400, 0), Margin = new Padding(0, 0, 0, 6) });
 
-            var btnRow = new FlowLayoutPanel { FlowDirection = FlowDirection.LeftToRight, Width = 340, Height = 36, WrapContents = false };
+            var btnRow = new FlowLayoutPanel { FlowDirection = FlowDirection.LeftToRight, Width = 400, Height = 38, WrapContents = false };
             var addBtn = new Button { Text = "添加", Width = 90, Height = 28, FlatStyle = FlatStyle.System };
             var testBtn = new Button { Text = "发送测试", Width = 100, Height = 28, FlatStyle = FlatStyle.System };
             btnRow.Controls.Add(addBtn);
@@ -510,9 +533,9 @@ namespace CodexZh
                 if (n == null) continue;
                 long idx = Backend.Long(n, "index");
                 string label = Backend.Str(n, "label") ?? "";
-                var rowPanel = new Panel { Width = 372, Height = 32 };
-                rowPanel.Controls.Add(new Label { Text = label, AutoSize = true, Left = 0, Top = 6, Width = 250 });
-                var del = new Button { Text = "删除", Width = 72, Height = 26, Left = 290, Top = 2, FlatStyle = FlatStyle.System };
+                var rowPanel = new Panel { Width = 420, Height = 34 };
+                rowPanel.Controls.Add(new Label { Text = label, AutoSize = true, Left = 0, Top = 6, Width = 310 });
+                var del = new Button { Text = "删除", Width = 76, Height = 28, Left = 338, Top = 2, FlatStyle = FlatStyle.System };
                 long capIdx = idx;
                 del.Click += (s, e) => { Backend.Call("notify-remove", capIdx.ToString()); form.Close(); ShowNotify(); };
                 rowPanel.Controls.Add(del);
@@ -535,6 +558,7 @@ namespace CodexZh
                 MaximizeBox = false,
                 MinimizeBox = false,
                 ShowInTaskbar = true,
+                AutoScaleMode = AutoScaleMode.Dpi,
                 Font = FontBase,
             };
             windows.Add(form);

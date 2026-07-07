@@ -128,6 +128,8 @@ export function makeDeps(overrides = {}) {
     homeDir: home,
     userId: overrides.userId || currentUserId(),
     runSchtasks: overrides.runSchtasks || ((args) => spawnSync("schtasks", args, { encoding: "utf8" })),
+    listProcesses: overrides.listProcesses || listWindowsProcesses,
+    killProcessTree: overrides.killProcessTree || ((pid) => spawnSync("taskkill", ["/PID", String(pid), "/T", "/F"], { encoding: "utf8" })),
     probePort: overrides.probePort || (() => probePortSync(APP_SERVER_PORT)),
     fetch: overrides.fetch || globalThis.fetch,
     log: overrides.log || (() => {}),
@@ -175,7 +177,41 @@ export function enable(deps) {
 export function disable(deps) {
   deps.runSchtasks(["/End", "/TN", TASK_NAME]); // 停当前实例，忽略失败
   deps.runSchtasks(["/Delete", "/TN", TASK_NAME, "/F"]);
+  stopInstallDaemons(deps);
   return { ok: true, enabled: false };
+}
+
+function listWindowsProcesses() {
+  const script = [
+    "Get-CimInstance Win32_Process",
+    "| Select-Object ProcessId,ParentProcessId,Name,CommandLine",
+    "| ConvertTo-Json -Compress",
+  ].join(" ");
+  const res = spawnSync("powershell", ["-NoProfile", "-Command", script], { encoding: "utf8", timeout: 10_000 });
+  if (res.status !== 0 || !res.stdout.trim()) return [];
+  try {
+    const parsed = JSON.parse(res.stdout);
+    return Array.isArray(parsed) ? parsed : [parsed];
+  } catch {
+    return [];
+  }
+}
+
+function stopInstallDaemons(deps) {
+  const daemonMain = normalizeProcessPath(installPaths(deps.installRoot).daemonMain);
+  for (const proc of deps.listProcesses()) {
+    const rawCommandLine = proc.commandLine ?? proc.CommandLine ?? "";
+    const commandLine = normalizeProcessPath(rawCommandLine);
+    if (!commandLine.includes(daemonMain)) continue;
+    if (!/\bstart\b/i.test(rawCommandLine)) continue;
+    const pid = Number(proc.processId ?? proc.ProcessId);
+    if (!Number.isInteger(pid) || pid <= 0 || pid === process.pid) continue;
+    deps.killProcessTree(pid);
+  }
+}
+
+function normalizeProcessPath(value) {
+  return String(value).replace(/\//g, "\\").toLowerCase();
 }
 
 // pair/pair-once 额外渲染二维码 BMP，路径回给托盘显示；其余命令原样走 core。
