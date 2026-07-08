@@ -36,7 +36,7 @@ test("generateDownloadBlock gives non-technical users a direct Windows installer
   });
 
   assert.match(block, /Windows 10 \/ Windows 11（64 位）/u);
-  assert.match(block, /下载 Codex-叉叉 0\.1\.1 Windows x64 安装包/u);
+  assert.match(block, /下载 Codex-ZH 中文版 0\.1\.1 Windows x64 安装包/u);
   // 下载区已精简（见「docs: 精简下载区」）：不再内联 Source code 警告与 sha256 校验和。
   assert.doesNotMatch(block, /Source code/u);
   assert.doesNotMatch(block, /54aadeb761320de0267a5636552ca1df90488b449f5c9a96781c92a8d6114651/u);
@@ -56,7 +56,7 @@ test("generateDownloadBlock renders a macOS arm64 dmg row when a dmg asset exist
   });
 
   assert.match(block, /macOS（Apple 芯片 \/ arm64）/u);
-  assert.match(block, /下载 Codex-叉叉 0\.1\.2 macOS arm64 安装包/u);
+  assert.match(block, /下载 Codex-ZH 中文版 0\.1\.2 macOS arm64 安装包/u);
   assert.match(block, /Codex-ZH-0\.1\.2-mac-arm64\.dmg/u);
   // 精简后下载区不再内联 dmg 的 sha256 校验和。
   assert.doesNotMatch(block, /97730f8af1815088f88efb9dba009925805c9da8ae92fc54d6bd13f944a538f4/u);
@@ -83,7 +83,7 @@ test("findReleaseAssets discovers both Windows and macOS assets from .sha256 fil
 });
 
 test("updateDownloadsSection replaces only the marked README downloads block", () => {
-  const readme = `# Codex-叉叉 中文版
+  const readme = `# Codex-ZH 中文版
 
 ## 下载
 

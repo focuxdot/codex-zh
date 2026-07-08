@@ -93,13 +93,13 @@ export function generateDownloadBlock({
   let windowsRow = "| Windows 10 / Windows 11（64 位） | 暂不提供，敬请等待 |";
   if (installerName) {
     const installerUrl = buildAssetDownloadUrl({ repo, tag, assetName: installerName });
-    windowsRow = `| Windows 10 / Windows 11（64 位） | [下载 Codex-叉叉 ${cleanVersion} Windows x64 安装包](${installerUrl}) |`;
+    windowsRow = `| Windows 10 / Windows 11（64 位） | [下载 Codex-ZH 中文版 ${cleanVersion} Windows x64 安装包](${installerUrl}) |`;
   }
 
-  let macRow = "| macOS | 暂不提供 Codex-叉叉 安装包，不要下载 Windows 版 |";
+  let macRow = "| macOS | 暂不提供 Codex-ZH 中文版安装包，不要下载 Windows 版 |";
   if (dmgName) {
     const dmgUrl = buildAssetDownloadUrl({ repo, tag, assetName: dmgName });
-    macRow = `| macOS（Apple 芯片 / arm64） | [下载 Codex-叉叉 ${cleanVersion} macOS arm64 安装包](${dmgUrl}) |`;
+    macRow = `| macOS（Apple 芯片 / arm64） | [下载 Codex-ZH 中文版 ${cleanVersion} macOS arm64 安装包](${dmgUrl}) |`;
   }
 
   return `${DOWNLOADS_START}
