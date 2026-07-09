@@ -50,7 +50,8 @@ export function findReleaseAssets(outputDir) {
     .map((entry) => entry.name)
     .sort();
 
-  const byExt = { ".exe": null, ".dmg": null };
+  let windows = null;
+  const macos = { arm64: null, x64: null };
   for (const shaName of files.filter((name) => name.endsWith(".sha256"))) {
     const text = readFileSync(join(outputDir, shaName), "utf8");
     const match = text.match(/([a-f0-9]{64})\s+(\S.*)$/imu);
@@ -58,35 +59,43 @@ export function findReleaseAssets(outputDir) {
     const assetName = (match?.[2]?.trim()) || shaName.replace(/\.sha256$/u, "");
     if (!sha256) continue;
     const ext = assetName.slice(assetName.lastIndexOf(".")).toLowerCase();
-    if (ext in byExt) {
-      byExt[ext] = { name: assetName, shaName, sha256 };
+    if (ext === ".exe") {
+      windows = { name: assetName, shaName, sha256 };
+    } else if (ext === ".dmg") {
+      macos[classifyMacDmgArch(assetName)] = { name: assetName, shaName, sha256 };
     }
   }
 
   // Fall back to a bare .exe with a sibling .sha256 (legacy single-job layout).
-  if (!byExt[".exe"]) {
+  if (!windows) {
     const installerName = files.find((name) => name.endsWith(".exe"));
     const shaName = files.find((name) => name.endsWith(".exe.sha256")) || files.find((name) => name.endsWith(".sha256"));
     if (installerName && shaName) {
       const sha256 = readFileSync(join(outputDir, shaName), "utf8").match(/\b[a-f0-9]{64}\b/iu)?.[0]?.toLowerCase();
-      if (sha256) byExt[".exe"] = { name: installerName, shaName, sha256 };
+      if (sha256) windows = { name: installerName, shaName, sha256 };
     }
   }
 
-  if (!byExt[".exe"] && !byExt[".dmg"]) {
+  if (!windows && !macos.arm64 && !macos.x64) {
     throw new Error(`Could not find a Windows .exe or macOS .dmg (with .sha256) in ${outputDir}.`);
   }
 
   return {
-    windows: byExt[".exe"],
-    macos: byExt[".dmg"],
+    windows,
+    macos,
   };
+}
+
+function classifyMacDmgArch(assetName) {
+  if (/-mac-x64\.dmg$/iu.test(assetName)) return "x64";
+  return "arm64";
 }
 
 export function generateDownloadBlock({
   repo, tag, version,
   installerName, sha256Name, sha256, // Windows (flat, backwards-compatible)
   dmgName, dmgSha256Name, dmgSha256, // macOS
+  dmgX64Name, dmgX64Sha256Name, dmgX64Sha256,
 }) {
   const cleanVersion = normalizeVersion(version);
 
@@ -96,11 +105,18 @@ export function generateDownloadBlock({
     windowsRow = `| Windows 10 / Windows 11（64 位） | [下载 Codex-ZH 中文版 ${cleanVersion} Windows x64 安装包](${installerUrl}) |`;
   }
 
-  let macRow = "| macOS | 暂不提供 Codex-ZH 中文版安装包，不要下载 Windows 版 |";
+  const macRows = [];
   if (dmgName) {
     const dmgUrl = buildAssetDownloadUrl({ repo, tag, assetName: dmgName });
-    macRow = `| macOS（Apple 芯片 / arm64） | [下载 Codex-ZH 中文版 ${cleanVersion} macOS arm64 安装包](${dmgUrl}) |`;
+    macRows.push(`| macOS（Apple 芯片 / arm64） | [下载 Codex-ZH 中文版 ${cleanVersion} macOS arm64 安装包](${dmgUrl}) |`);
   }
+  if (dmgX64Name) {
+    const dmgX64Url = buildAssetDownloadUrl({ repo, tag, assetName: dmgX64Name });
+    macRows.push(`| macOS（Intel / x64，macOS 12+） | [下载 Codex-ZH 中文版 ${cleanVersion} macOS Intel x64 安装包](${dmgX64Url}) |`);
+  }
+  const macRowsText = macRows.length
+    ? macRows.join("\n")
+    : "| macOS | 暂不提供 Codex-ZH 中文版安装包，不要下载 Windows 版 |";
 
   return `${DOWNLOADS_START}
 当前最新版：v${cleanVersion}
@@ -108,7 +124,7 @@ export function generateDownloadBlock({
 | 你的系统 | 下载哪个版本 |
 | --- | --- |
 ${windowsRow}
-${macRow}
+${macRowsText}
 
 macOS 版打开时如果提示文件“已损坏”或无法安装，属正常现象，按[常见问题里的说明](#macos-打开时提示已损坏或无法验证开发者)处理即可。
 ${DOWNLOADS_END}`;
@@ -150,9 +166,12 @@ export function updateReadmeDownloads({
     installerName: assets.windows?.name,
     sha256Name: assets.windows?.shaName,
     sha256: assets.windows?.sha256,
-    dmgName: assets.macos?.name,
-    dmgSha256Name: assets.macos?.shaName,
-    dmgSha256: assets.macos?.sha256,
+    dmgName: assets.macos.arm64?.name,
+    dmgSha256Name: assets.macos.arm64?.shaName,
+    dmgSha256: assets.macos.arm64?.sha256,
+    dmgX64Name: assets.macos.x64?.name,
+    dmgX64Sha256Name: assets.macos.x64?.shaName,
+    dmgX64Sha256: assets.macos.x64?.sha256,
   });
   const original = readFileSync(readmePath, "utf8");
   const updated = updateDownloadsSection(original, block);

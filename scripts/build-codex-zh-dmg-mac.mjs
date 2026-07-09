@@ -7,12 +7,12 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 
 const usage = `Usage:
-  node scripts/build-codex-zh-dmg-mac.mjs --app <Codex-叉叉.app> --out-dir <dir> [--version x.y.z] [--volname name]
+  node scripts/build-codex-zh-dmg-mac.mjs --app <Codex-叉叉.app> --out-dir <dir> [--version x.y.z] [--arch arm64|x64] [--volname name]
 
 Packages the outer Codex-叉叉.app into a compressed .dmg with an /Applications
 symlink and Chinese de-quarantine instructions. Outputs:
-  Codex-ZH-<version>-mac-arm64.dmg
-  Codex-ZH-<version>-mac-arm64.dmg.sha256
+  Codex-ZH-<version>-mac-<arch>.dmg
+  Codex-ZH-<version>-mac-<arch>.dmg.sha256
   codex-zh-dmg-mac.json
 macOS only (needs hdiutil).
 `;
@@ -54,6 +54,7 @@ const args = parseArgs(process.argv.slice(2));
 const app = requiredPath(args.app, "--app");
 const outDir = path.resolve(requiredValue(args["out-dir"], "--out-dir"));
 const version = String(args.version || readPackageVersion());
+const arch = normalizeArch(args.arch || "arm64");
 const volName = String(args.volname || "Codex-叉叉");
 
 if (process.platform !== "darwin") {
@@ -63,7 +64,7 @@ if (path.basename(app) !== "Codex-叉叉.app") {
   fail(`Expected the outer bundle Codex-叉叉.app, got ${path.basename(app)}`);
 }
 
-const baseName = `Codex-ZH-${version}-mac-arm64`;
+const baseName = `Codex-ZH-${version}-mac-${arch}`;
 const dmgPath = path.join(outDir, `${baseName}.dmg`);
 const shaPath = `${dmgPath}.sha256`;
 const stageDir = path.join(outDir, ".dmg-stage");
@@ -97,6 +98,7 @@ rmSync(stageDir, { force: true, recursive: true });
 const manifest = {
   builtOn: "macos",
   version,
+  arch,
   dmgName: path.basename(dmgPath),
   sha256,
   sha256File: path.basename(shaPath),
@@ -119,6 +121,11 @@ function readPackageVersion() {
   } catch {
     return "0.0.0";
   }
+}
+
+function normalizeArch(value) {
+  if (value === "arm64" || value === "x64") return value;
+  fail(`Invalid --arch: ${value}. Expected arm64 or x64.`);
 }
 
 function requiredValue(value, flag) {

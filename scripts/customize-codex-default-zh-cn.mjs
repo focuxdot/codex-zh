@@ -29,6 +29,7 @@ const unpackedDir = args["asar-unpacked-dir"] ? requiredPath(args["asar-unpacked
 const workDir = requiredPath(args["work-dir"], "--work-dir");
 const outAsar = requiredPath(args["out-asar"], "--out-asar");
 const platform = args.platform === "mac" ? "mac" : "windows";
+const allowMissingMacFeatureOverrides = Boolean(args["allow-missing-mac-feature-overrides"]);
 
 if (!existsSync(sourceDir)) {
   fail(`Source ASAR directory does not exist: ${sourceDir}`);
@@ -48,7 +49,7 @@ const patches = platform === "mac"
       patchMacI18nOfflineDefault(workDir),
       patchMacBrowserAvailability(workDir),
       patchMacComputerUseAvailability(workDir),
-      patchMacDefaultFeatureOverrides(workDir),
+      patchMacDefaultFeatureOverrides(workDir, { optional: allowMissingMacFeatureOverrides }),
       patchRemoteExternalSessionRefreshMain(workDir),
       patchRemoteExternalSessionRefreshPreload(workDir),
     ]
@@ -64,7 +65,7 @@ const patches = platform === "mac"
     ];
 
 for (const patch of patches) {
-  if (patch.count === 0) {
+  if (patch.count === 0 && !patch.optional) {
     fail(`Patch did not match: ${patch.name}`);
   }
 }
@@ -404,7 +405,7 @@ function applyStringReplacements(text, pairs) {
   return { text, count };
 }
 
-function patchMacFilesWithReplacements({ root, dirs, pairs, name }) {
+function patchMacFilesWithReplacements({ root, dirs, pairs, name, optional = false }) {
   let count = 0;
   const files = [];
   for (const dir of dirs) {
@@ -418,7 +419,7 @@ function patchMacFilesWithReplacements({ root, dirs, pairs, name }) {
     }
     count += result.count;
   }
-  return { name, count };
+  return { name, count, optional };
 }
 
 function patchMacLocaleOverrideDefault(root) {
@@ -499,7 +500,7 @@ function patchMacComputerUseAvailability(root) {
   });
 }
 
-function patchMacDefaultFeatureOverrides(root) {
+function patchMacDefaultFeatureOverrides(root, { optional = false } = {}) {
   // Enable the browser/computer-use experimental features by default: add them to
   // the known-feature list and inject default overrides when none are set.
   const defaultOverrides =
@@ -508,6 +509,7 @@ function patchMacDefaultFeatureOverrides(root) {
     root,
     dirs: ["webview/assets"],
     name: "mac default desktop experimental feature overrides",
+    optional,
     pairs: [
       [
         "A7=[`apps_mcp_path_override`,`auth_elicitation`,`memories`,`tool_suggest`],j7=",

@@ -57,15 +57,22 @@ test("release workflow packages Windows installer after GitHub Release publish",
   assert.match(workflow, /git push origin HEAD:main/u);
 });
 
-test("release workflow builds the macOS arm64 dmg alongside the Windows installer", () => {
+test("release workflow builds macOS arm64 and Intel x64 dmgs alongside the Windows installer", () => {
   assert.match(workflow, /macos-installer:/u);
+  assert.match(workflow, /matrix:\s*\n\s+arch: \[arm64, x64\]/u);
   assert.match(workflow, /runs-on: macos-14/u);
   assert.match(workflow, /CODEX_MACOS_APP_DMG_URL/u);
   assert.match(workflow, /CODEX_MACOS_APP_DMG_SHA256/u);
-  assert.match(workflow, /Set CODEX_MACOS_APP_DMG_URL to a pinned official Codex macOS dmg/u);
+  assert.match(workflow, /CODEX_MACOS_X64_APP_DMG_URL/u);
+  assert.match(workflow, /CODEX_MACOS_X64_APP_DMG_SHA256/u);
+  assert.match(workflow, /source_codex_macos_x64_dmg_url/u);
+  assert.match(workflow, /Set \$secret_name to a pinned official Codex macOS \$MAC_ARCH dmg/u);
   assert.match(workflow, /Source dmg SHA-256 mismatch/u);
   assert.match(workflow, /scripts\/build-codex-zh-staging-mac\.mjs/u);
   assert.match(workflow, /scripts\/build-codex-zh-dmg-mac\.mjs/u);
+  assert.match(workflow, /--arch "\$MAC_ARCH"/u);
+  assert.match(workflow, /lipo -info "\$APP\/Contents\/MacOS\/Codex" \| grep -q "\$expected_arch"/u);
+  assert.match(workflow, /codex-zh-macos-\$\{\{ matrix\.arch \}\}-dmg/u);
   assert.match(workflow, /codex-zh-launcher\.mjs" --self-test --print-result/u);
   assert.match(workflow, /gh release upload "\$RELEASE_TAG" "\$RELEASE_OUTPUT_DIR"\/\*\.dmg/u);
   // The dmg job must pin the source like the Windows job (no unpinned downloads).

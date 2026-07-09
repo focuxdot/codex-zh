@@ -11,6 +11,7 @@ const usage = `Usage:
 Options:
   --project-root <dir>     Repo root (default: cwd)
   --version <x.y.z>        Codex-叉叉 version for the outer bundle (default: package.json)
+  --arch <arm64|x64>       Target macOS architecture (default: arm64)
   --sign-identity <id>     codesign identity (default: "-" ad-hoc)
   --skip-asar              Copy + sign without patching the asar (debug)
   --skip-sign              Patch without re-signing (debug)
@@ -18,13 +19,15 @@ Options:
 Produces <out-dir>/Codex-叉叉.app: an outer launcher bundle whose Contents/Resources/
 app/Codex.app is the official macOS Codex app with the Codex-叉叉 zh-CN + capability
 asar patches applied, Info.plist ElectronAsarIntegrity updated, and both bundles
-re-signed (ad-hoc by default). macOS arm64 only.
+re-signed (ad-hoc by default). macOS arm64 and x64 are supported.
 `;
 
 const args = parseArgs(process.argv.slice(2));
 const sourceApp = requiredPath(args["source-app"], "--source-app");
 const outDir = path.resolve(requiredValue(args["out-dir"], "--out-dir"));
 const projectRoot = path.resolve(args["project-root"] || process.cwd());
+const arch = normalizeArch(args.arch || "arm64");
+const swiftTarget = arch === "x64" ? "x86_64-apple-macos12.0" : "arm64-apple-macos11.0";
 const signIdentity = args["sign-identity"] || "-";
 const skipAsar = "skip-asar" in args;
 const skipSign = "skip-sign" in args;
@@ -51,6 +54,7 @@ const srcMain = path.join(sourceApp, "Contents", "MacOS", "Codex");
 requirePath(srcAsar, "source app.asar");
 requirePath(srcPlist, "source Info.plist");
 requirePath(srcMain, "source Contents/MacOS/Codex");
+const sourceMainArch = assertMachOArch(srcMain, arch, "source Contents/MacOS/Codex");
 
 // Single bundle: Codex-叉叉.app IS the patched Codex.app (with our launcher inserted
 // as CFBundleExecutable). Nesting Codex.app inside another .app breaks Electron's
@@ -88,6 +92,9 @@ if (!skipAsar) {
     "--out-asar", patchedAsar,
     "--platform", "mac",
   ];
+  if (arch === "x64") {
+    customizerArgs.push("--allow-missing-mac-feature-overrides", "true");
+  }
   // Reproduce the original unpack layout exactly: the macOS bundle unpacks whole
   // native-module directories (not just *.node), so disable the default --unpack
   // glob and unpack precisely the packages that are unpacked in the source bundle.
@@ -154,8 +161,10 @@ const asarHash = existsSync(stagedAsar) ? asarHeaderHash(stagedAsar) : null;
 const manifest = {
   builtOn: "macos",
   version,
+  arch,
   sourceAppName: path.basename(sourceApp),
   appName: path.basename(stagedApp),
+  sourceMainArch,
   asarHeaderHash: asarHash,
   patches: patchSummary,
   sign: signSummary,
@@ -203,7 +212,7 @@ function assembleLauncher() {
     const swiftSrc = path.join(macLauncherDir, `${name}.swift`);
     requirePath(swiftSrc, `swift source (launcher/mac/${name}.swift)`);
     log(`Compiling ${name}.swift ...`);
-    runOrThrow("swiftc", ["-swift-version", "5", "-target", "arm64-apple-macos11.0", "-O", "-o", path.join(binDir, out), swiftSrc]);
+    runOrThrow("swiftc", ["-swift-version", "5", "-target", swiftTarget, "-O", "-o", path.join(binDir, out), swiftSrc]);
   }
 
   // Install the bash entry as a new executable alongside the original Codex binary,
@@ -291,6 +300,27 @@ function runOrThrow(command, argv, opts = {}) {
 
 function log(message) {
   console.error(`[staging-mac] ${message}`);
+}
+
+function normalizeArch(value) {
+  if (value === "arm64" || value === "x64") return value;
+  fail(`Invalid --arch: ${value}. Expected arm64 or x64.`);
+}
+
+function expectedMachOArch(value) {
+  return value === "x64" ? "x86_64" : "arm64";
+}
+
+function assertMachOArch(filePath, targetArch, label) {
+  const expected = expectedMachOArch(targetArch);
+  const info = runOrThrow("lipo", ["-info", filePath], { allowStderr: true }).trim();
+  const arches = info.includes(" are: ")
+    ? info.split(" are: ").pop().trim().split(/\s+/)
+    : [info.split(" architecture: ").pop().trim()];
+  if (!arches.includes(expected)) {
+    fail(`${label} architecture mismatch for --arch ${targetArch}. Expected ${expected}; lipo says: ${info}`);
+  }
+  return info;
 }
 
 function requiredValue(value, flag) {

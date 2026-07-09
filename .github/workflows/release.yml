@@ -33,6 +33,14 @@ on:
         description: "Optional SHA-256 for the macOS source dmg."
         required: false
         type: string
+      source_codex_macos_x64_dmg_url:
+        description: "Public URL to the official Codex macOS Intel x64 .dmg. Prefer the repository secret for private URLs."
+        required: false
+        type: string
+      source_codex_macos_x64_dmg_sha256:
+        description: "Optional SHA-256 for the macOS Intel x64 source dmg."
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -280,15 +288,24 @@ jobs:
           & gh release upload $env:RELEASE_TAG @assets --clobber
 
   macos-installer:
-    name: Build macOS dmg
+    name: Build macOS ${{ matrix.arch }} dmg
     if: startsWith(github.event.release.tag_name || github.ref_name, 'v')
     needs: windows-installer
     runs-on: macos-14
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [arm64, x64]
     env:
       CODEX_MACOS_APP_DMG_URL: ${{ secrets.CODEX_MACOS_APP_DMG_URL }}
       CODEX_MACOS_APP_DMG_SHA256: ${{ secrets.CODEX_MACOS_APP_DMG_SHA256 }}
+      CODEX_MACOS_X64_APP_DMG_URL: ${{ secrets.CODEX_MACOS_X64_APP_DMG_URL }}
+      CODEX_MACOS_X64_APP_DMG_SHA256: ${{ secrets.CODEX_MACOS_X64_APP_DMG_SHA256 }}
       SOURCE_MACOS_DMG_URL_INPUT: ${{ inputs.source_codex_macos_dmg_url }}
       SOURCE_MACOS_DMG_SHA256_INPUT: ${{ inputs.source_codex_macos_dmg_sha256 }}
+      SOURCE_MACOS_X64_DMG_URL_INPUT: ${{ inputs.source_codex_macos_x64_dmg_url }}
+      SOURCE_MACOS_X64_DMG_SHA256_INPUT: ${{ inputs.source_codex_macos_x64_dmg_sha256 }}
+      MAC_ARCH: ${{ matrix.arch }}
       VERSION_INPUT: ${{ inputs.version }}
       RELEASE_TAG: ${{ github.event.release.tag_name || github.ref_name }}
     steps:
@@ -319,10 +336,23 @@ jobs:
 
       - name: Download official Codex macOS app source
         run: |
-          url="${SOURCE_MACOS_DMG_URL_INPUT:-$CODEX_MACOS_APP_DMG_URL}"
-          [ -n "$url" ] || { echo "Set CODEX_MACOS_APP_DMG_URL to a pinned official Codex macOS dmg."; exit 1; }
-          hash="${SOURCE_MACOS_DMG_SHA256_INPUT:-$CODEX_MACOS_APP_DMG_SHA256}"
-          [ -n "$hash" ] || { echo "Set CODEX_MACOS_APP_DMG_SHA256 so release builds are pinned."; exit 1; }
+          case "$MAC_ARCH" in
+            arm64)
+              url="${SOURCE_MACOS_DMG_URL_INPUT:-$CODEX_MACOS_APP_DMG_URL}"
+              hash="${SOURCE_MACOS_DMG_SHA256_INPUT:-$CODEX_MACOS_APP_DMG_SHA256}"
+              secret_name="CODEX_MACOS_APP_DMG_URL / CODEX_MACOS_APP_DMG_SHA256"
+              ;;
+            x64)
+              url="${SOURCE_MACOS_X64_DMG_URL_INPUT:-$CODEX_MACOS_X64_APP_DMG_URL}"
+              hash="${SOURCE_MACOS_X64_DMG_SHA256_INPUT:-$CODEX_MACOS_X64_APP_DMG_SHA256}"
+              secret_name="CODEX_MACOS_X64_APP_DMG_URL / CODEX_MACOS_X64_APP_DMG_SHA256"
+              ;;
+            *)
+              echo "Unsupported MAC_ARCH: $MAC_ARCH"; exit 1
+              ;;
+          esac
+          [ -n "$url" ] || { echo "Set $secret_name to a pinned official Codex macOS $MAC_ARCH dmg."; exit 1; }
+          [ -n "$hash" ] || { echo "Set $secret_name so release builds are pinned."; exit 1; }
           curl -fsSL "$url" -o "$SOURCE_DMG"
           actual="$(shasum -a 256 "$SOURCE_DMG" | awk '{print $1}')"
           expected="$(printf '%s' "$hash" | tr 'A-F' 'a-f')"
@@ -339,13 +369,18 @@ jobs:
 
       - name: Build staged app and dmg
         run: |
-          node scripts/build-codex-zh-staging-mac.mjs --source-app "$CODEX_SOURCE_APP" --out-dir "$STAGING_DIR" --version "$CODEX_ZH_VERSION"
-          node scripts/build-codex-zh-dmg-mac.mjs --app "$STAGING_DIR/Codex-叉叉.app" --out-dir "$RELEASE_OUTPUT_DIR" --version "$CODEX_ZH_VERSION"
+          node scripts/build-codex-zh-staging-mac.mjs --source-app "$CODEX_SOURCE_APP" --out-dir "$STAGING_DIR" --version "$CODEX_ZH_VERSION" --arch "$MAC_ARCH"
+          node scripts/build-codex-zh-dmg-mac.mjs --app "$STAGING_DIR/Codex-叉叉.app" --out-dir "$RELEASE_OUTPUT_DIR" --version "$CODEX_ZH_VERSION" --arch "$MAC_ARCH"
 
       - name: Smoke test built app
         run: |
           APP="$STAGING_DIR/Codex-叉叉.app"
           codesign --verify --deep --strict "$APP"
+          expected_arch="$MAC_ARCH"
+          if [ "$expected_arch" = "x64" ]; then expected_arch="x86_64"; fi
+          lipo -info "$APP/Contents/MacOS/Codex" | grep -q "$expected_arch"
+          lipo -info "$APP/Contents/Resources/codex-zh/bin/CodexZhConfig" | grep -q "$expected_arch"
+          lipo -info "$APP/Contents/Resources/codex-zh/bin/CodexZhRemoteMenu" | grep -q "$expected_arch"
           # Run the orchestrator self-test with the runner's Node (avoids depending on
           # the bundle's re-signed Node under CI security policy).
           result="$(CODEX_ZH_APP_ROOT="$APP" node "$APP/Contents/Resources/codex-zh/launcher/mac/codex-zh-launcher.mjs" --self-test --print-result)"
@@ -356,7 +391,7 @@ jobs:
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: codex-zh-macos-dmg
+          name: codex-zh-macos-${{ matrix.arch }}-dmg
           path: |
             ${{ env.RELEASE_OUTPUT_DIR }}/*.dmg
             ${{ env.RELEASE_OUTPUT_DIR }}/*.sha256
@@ -371,7 +406,7 @@ jobs:
 
   update-readme:
     name: Update README download links
-    if: (github.event_name == 'release' || github.event_name == 'push') && (always() && needs.windows-installer.result == 'success')
+    if: (github.event_name == 'release' || github.event_name == 'push') && (always() && needs.windows-installer.result == 'success' && needs.macos-installer.result == 'success')
     needs: [windows-installer, macos-installer]
     runs-on: ubuntu-latest
     env:
