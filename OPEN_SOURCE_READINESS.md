@@ -81,28 +81,28 @@ The two SHAs must match for `main` pushes. `gh auth status` alone is not enough 
 
 GitHub Actions can build the Windows installer automatically after a version tag is pushed or a GitHub Release is published. The workflow is `.github/workflows/release.yml`.
 
-Release copy is user-facing and must be Simplified Chinese by default. GitHub Release notes must describe user-visible features and fixes, not build status. The workflow generates Release notes from the matching `CHANGELOG.md` section such as `## v0.1.2`; missing or non-Chinese bullets should block the release. Technical names such as `Codex.exe`, provider IDs, commands, versions, and file names may remain English.
+Release copy is user-facing and must be Simplified Chinese by default. GitHub Release notes must describe user-visible features and fixes, not build status. The workflow generates Release notes from the matching `CHANGELOG.md` section such as `## v0.1.2`; missing or non-Chinese bullets should block the release. Technical names such as `ChatGPT.exe`, `Codex.exe`, provider IDs, commands, versions, and file names may remain English.
 
 Repository secrets for automatic release builds:
 
 | Secret | Required | Purpose |
 | --- | --- | --- |
-| `CODEX_WINDOWS_APP_ZIP_URL` | Yes | Private or public URL to a pinned `.zip` containing one tested official Windows Codex app folder. |
-| `CODEX_WINDOWS_APP_ZIP_SHA256` | Yes | SHA-256 of the source zip. The workflow fails if it does not match. |
-| `CODEX_WINDOWS_APP_LABEL` | Recommended | Installer filename label, for example `Codex-26.608.1337.0`. |
+| `CODEX_WINDOWS_APP_ZIP_URL` | Yes | Private or public URL to the pinned official Windows ChatGPT/Codex `.zip` or `.msix` archive. |
+| `CODEX_WINDOWS_APP_ZIP_SHA256` | Legacy fallback | SHA-256 of the source archive. `release-sources.json` is authoritative unless a workflow input explicitly overrides it. |
+| `CODEX_WINDOWS_APP_LABEL` | Recommended | Installer filename label, for example `ChatGPT-26.707.31428`. |
 
-The source zip must contain a folder with:
+The source archive must contain a folder with:
 
-- `Codex.exe`
+- `ChatGPT.exe` (current) or `Codex.exe` (legacy fallback)
 - `resources/app.asar`
 
-Do not default release builds to `winget install Codex -s msstore`. That command installs the current Microsoft Store version, so a Store update can silently change the upstream Codex version used by Codex-叉叉. Codex-叉叉 releases should build from an explicitly tested Codex app version and SHA-256.
+Do not default release builds to `winget install ChatGPT -s msstore`. That command installs the current Microsoft Store version, so a Store update can silently change the upstream ChatGPT version used by Codex-叉叉. Codex-叉叉 releases must build from the exact desktop version and SHA-256 pinned in `release-sources.json`; CI also verifies the version inside `resources/app.asar`.
 
 When `v*` tag is pushed or a release is published, the workflow:
 
 1. Runs `npm test`.
 2. Installs Inno Setup on the Windows runner.
-3. Downloads and verifies the pinned official Codex app zip.
+3. Downloads and verifies the pinned official ChatGPT/Codex app archive and embedded desktop version.
 4. Builds the staged Codex-叉叉 app.
 5. Builds the Inno Setup installer and `.sha256` file.
 6. Installs the generated installer silently and runs `codex doctor`.

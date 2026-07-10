@@ -5,8 +5,8 @@ import process from "node:process";
 import { createHash } from "node:crypto";
 
 const usage = `Usage:
-  node scripts/patch-codex-asar-integrity.mjs --exe <Codex.exe> --asar <app.asar> --old-hash <64-char sha256>
-  node scripts/patch-codex-asar-integrity.mjs --exe <Codex.exe> --asar <app.asar> --old-asar <previous-app.asar>
+  node scripts/patch-codex-asar-integrity.mjs --exe <ChatGPT.exe-or-Codex.exe> --asar <app.asar> --old-hash <64-char sha256>
+  node scripts/patch-codex-asar-integrity.mjs --exe <ChatGPT.exe-or-Codex.exe> --asar <app.asar> --old-asar <previous-app.asar>
 `;
 
 const args = parseArgs(process.argv.slice(2));

@@ -18,8 +18,8 @@ $IssPath = Join-Path $ProjectRoot "installer\CodexZh.iss"
 if (!(Test-Path $StageRoot)) {
   throw "StageRoot not found: $StageRoot"
 }
-if (!(Test-Path (Join-Path $StageRoot "app\Codex.exe"))) {
-  throw "Staged app\Codex.exe not found under StageRoot."
+if (!(Test-Path (Join-Path $StageRoot "app\ChatGPT.exe")) -and !(Test-Path (Join-Path $StageRoot "app\Codex.exe"))) {
+  throw "Staged app\ChatGPT.exe or app\Codex.exe not found under StageRoot."
 }
 if (!(Test-Path $IssPath)) {
   throw "ISS file not found: $IssPath"
@@ -59,6 +59,7 @@ function ConvertTo-SourceCodexFileLabel {
 
   $safe = ConvertTo-SafeFileLabel $Label
   $safe = $safe -replace '^OpenAI[._-]+Codex(?=$|[._-])', 'Codex'
+  $safe = $safe -replace '^OpenAI[._-]+ChatGPT(?=$|[._-])', 'ChatGPT'
   return $safe
 }
 

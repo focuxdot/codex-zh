@@ -10,7 +10,7 @@ if (!(Test-Path $Installer)) {
   throw "Installer not found: $Installer"
 }
 
-Get-Process Codex, powershell -ErrorAction SilentlyContinue |
+Get-Process ChatGPT, Codex, powershell -ErrorAction SilentlyContinue |
   Where-Object { $_.Path -like "*\Codex-ZH\*" } |
   Stop-Process -Force -ErrorAction SilentlyContinue
 
@@ -47,5 +47,8 @@ if ($installProcess.ExitCode -ne 0) {
 [ordered]@{
   installDir = $installDir
   launcher = Join-Path $installDir "launcher\CodexZhLauncher.ps1"
-  codexExe = Join-Path $installDir "app\Codex.exe"
+  desktopExe = @(
+    (Join-Path $installDir "app\ChatGPT.exe"),
+    (Join-Path $installDir "app\Codex.exe")
+  ) | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
 } | ConvertTo-Json -Depth 6

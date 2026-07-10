@@ -59,6 +59,14 @@ test("staging writes bundled marketplace metadata as UTF-8 without BOM", () => {
   assert.doesNotMatch(staging, /Set-Content -LiteralPath \$marketplacePath -Encoding UTF8/u);
 });
 
+test("desktop launchers accept the renamed ChatGPT executable while retaining Codex fallback", () => {
+  assert.match(launcher, /"app\\ChatGPT\.exe"/u);
+  assert.match(launcher, /"app\\Codex\.exe"/u);
+  assert.match(staging, /Get-DesktopExecutable/u);
+  assert.match(staging, /ChatGPT\.exe/u);
+  assert.match(staging, /Codex\.exe/u);
+});
+
 test("launcher presets default to Wokey before custom and OpenRouter", () => {
   assert.match(
     launcher,
@@ -98,7 +106,7 @@ test("launcher keeps connection test separate from primary actions", () => {
 });
 
 test("launcher gates first-run router config before runtime initialization", () => {
-  const launchFlowStart = launcher.indexOf('throw "Codex.exe not found: $CodexExe"');
+  const launchFlowStart = launcher.indexOf('throw "ChatGPT/Codex desktop executable not found: $CodexExe"');
   assert.notEqual(launchFlowStart, -1);
   const launchFlow = launcher.slice(launchFlowStart);
   const noLaunchIndex = launchFlow.indexOf("if ($NoLaunch)");
@@ -184,7 +192,7 @@ test("installer stops holding processes before extraction to avoid DeleteFile co
   assert.match(installer, /taskkill\.exe'\), '\/F \/IM CodexZhTray\.exe \/T'/u);
   assert.match(installer, /taskkill\.exe'\), '\/F \/IM CodexZhLauncher\.exe \/T'/u);
   // Only the bundled in-dir node daemon is killed — never the user's own Node.
-  assert.match(installer, /\$_\.Name -eq ''node\.exe''/u);
+  assert.match(installer, /\$_\.Name -in @\(''node\.exe'',''ChatGPT\.exe'',''Codex\.exe''\)/u);
   assert.match(installer, /\$_\.ExecutablePath -like/u);
   // Uninstall mirrors the same cleanup before file removal.
   assert.match(installer, /\[UninstallRun\][\s\S]*\/F \/IM codex\.exe \/T/u);

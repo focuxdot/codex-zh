@@ -29,7 +29,6 @@ const unpackedDir = args["asar-unpacked-dir"] ? requiredPath(args["asar-unpacked
 const workDir = requiredPath(args["work-dir"], "--work-dir");
 const outAsar = requiredPath(args["out-asar"], "--out-asar");
 const platform = args.platform === "mac" ? "mac" : "windows";
-const allowMissingMacFeatureOverrides = Boolean(args["allow-missing-mac-feature-overrides"]);
 
 if (!existsSync(sourceDir)) {
   fail(`Source ASAR directory does not exist: ${sourceDir}`);
@@ -49,7 +48,10 @@ const patches = platform === "mac"
       patchMacI18nOfflineDefault(workDir),
       patchMacBrowserAvailability(workDir),
       patchMacComputerUseAvailability(workDir),
-      patchMacDefaultFeatureOverrides(workDir, { optional: allowMissingMacFeatureOverrides }),
+      // ChatGPT desktop 26.707 promotes these capabilities to stable defaults.
+      // Keep the old patch for earlier Codex sources, but do not fail when the
+      // legacy feature-list shape has disappeared from a newer official build.
+      patchMacDefaultFeatureOverrides(workDir, { optional: true }),
       patchRemoteExternalSessionRefreshMain(workDir),
       patchRemoteExternalSessionRefreshPreload(workDir),
     ]
@@ -59,7 +61,7 @@ const patches = platform === "mac"
       patchI18nOfflineDefault(workDir),
       patchCodeVBrowserAvailability(workDir),
       patchCodeVComputerUseAvailability(workDir),
-      patchCodeVDefaultFeatureOverrides(workDir),
+      patchCodeVDefaultFeatureOverrides(workDir, { optional: true }),
       patchWindowsMicaBackground(workDir),
       patchStartupLoaderLightTheme(workDir),
     ];
@@ -120,17 +122,15 @@ function patchLocaleOverrideDefaults(root) {
 function patchLocaleResolverDefault(root) {
   let count = 0;
   for (const file of listFiles(path.join(root, "webview", "assets"), ".js")) {
-    const name = path.basename(file);
-    if (!name.startsWith("locale-resolver-")) {
-      continue;
-    }
-    let text = readFileSync(file, "utf8");
-    const next = text.replace("var t=`en-US`,", "var t=`zh-CN`,");
-    if (next !== text) {
-      count += 1;
-      writeFileSync(file, next);
-    } else if (text.includes("var t=`zh-CN`,")) {
-      count += 1;
+    const text = readFileSync(file, "utf8");
+    const pattern = /`en-US`(,[A-Za-z0-9_$]{1,5}=Object\.assign\(\{"\.{1,2}\/locales\/)/g;
+    const patchedPattern = /`zh-CN`,[A-Za-z0-9_$]{1,5}=Object\.assign\(\{"\.{1,2}\/locales\//g;
+    const matches = text.match(pattern)?.length ?? 0;
+    if (matches > 0) {
+      writeFileSync(file, text.replace(pattern, "`zh-CN`$1"));
+      count += matches;
+    } else {
+      count += text.match(patchedPattern)?.length ?? 0;
     }
   }
   return { name: "locale resolver default zh-CN", count };
@@ -139,10 +139,6 @@ function patchLocaleResolverDefault(root) {
 function patchI18nOfflineDefault(root) {
   let count = 0;
   for (const file of listFiles(path.join(root, "webview", "assets"), ".js")) {
-    const name = path.basename(file);
-    if (!name.startsWith("app-main-")) {
-      continue;
-    }
     let text = readFileSync(file, "utf8");
     const enableI18nPattern = /([A-Za-z_$][\w$]*\?\.get\(`enable_i18n`,)!1\)/g;
     const enableI18nPatchedPattern = /[A-Za-z_$][\w$]*\?\.get\(`enable_i18n`,!0\)/g;
@@ -191,6 +187,10 @@ function patchCodeVBrowserAvailability(root) {
         "function g({isBrowserAgentGateEnabled:e,isBrowserSidebarEnabled:t,isBrowserUseEnabled:n,isLoading:r,runCodexInWsl:i,windowType:a}){return a===`chrome-extension`?`window-type-disabled`:r?`loading`:t?e?n?i?`wsl-disabled`:`available`:`config-requirement-disabled`:`statsig-disabled`:`browser-pane-disabled`}",
         "function g({isBrowserAgentGateEnabled:e,isBrowserSidebarEnabled:t,isBrowserUseEnabled:n,isLoading:r,runCodexInWsl:i,windowType:a}){return a===`chrome-extension`?`window-type-disabled`:i?`wsl-disabled`:n===!1?`config-requirement-disabled`:`available`}",
       ],
+      [
+        "({isBrowserAgentGateEnabled:e,isBrowserSidebarEnabled:t,isBrowserUseEnabled:n,isLoading:r,runCodexInWsl:i,windowType:a}){return a===`chrome-extension`?`window-type-disabled`:r?`loading`:t?e?n?i?`wsl-disabled`:`available`:`config-requirement-disabled`:`statsig-disabled`:`browser-pane-disabled`}",
+        "({isBrowserAgentGateEnabled:e,isBrowserSidebarEnabled:t,isBrowserUseEnabled:n,isLoading:r,runCodexInWsl:i,windowType:a}){return a===`chrome-extension`?`window-type-disabled`:i?`wsl-disabled`:n===!1?`config-requirement-disabled`:`available`}",
+      ],
     ];
     for (const [target, replacement] of replacements) {
       const matches = text.split(target).length - 1;
@@ -227,6 +227,10 @@ function patchCodeVComputerUseAvailability(root) {
         "function p({areRequiredFeaturesEnabled:e,enabled:t,isAnyFeatureLoading:n,isComputerUseGateEnabled:r,isHostCompatiblePlatform:i,isPlatformLoading:a,windowType:o}){return t?o===`electron`?r?a?`loading`:i?n?`loading`:e?`available`:`config-requirement-disabled`:`unsupported-platform`:`statsig-disabled`:`window-type-disabled`:`disabled`}",
         "function p({areRequiredFeaturesEnabled:e,enabled:t,isAnyFeatureLoading:n,isComputerUseGateEnabled:r,isHostCompatiblePlatform:i,isPlatformLoading:a,windowType:o}){return t?o===`electron`?a?`loading`:i?n?`loading`:e?`available`:`config-requirement-disabled`:`unsupported-platform`:`window-type-disabled`:`disabled`}",
       ],
+      [
+        "({areRequiredFeaturesEnabled:e,enabled:t,isAnyFeatureLoading:n,isComputerUseGateEnabled:r,isHostCompatiblePlatform:i,isPlatformLoading:a,windowType:o}){return t?o===`electron`?r?a?`loading`:i?n?`loading`:e?`available`:`config-requirement-disabled`:`unsupported-platform`:`statsig-disabled`:`window-type-disabled`:`disabled`}",
+        "({areRequiredFeaturesEnabled:e,enabled:t,isAnyFeatureLoading:n,isComputerUseGateEnabled:r,isHostCompatiblePlatform:i,isPlatformLoading:a,windowType:o}){return t?o===`electron`?a?`loading`:i?n?`loading`:e?`available`:`config-requirement-disabled`:`unsupported-platform`:`window-type-disabled`:`disabled`}",
+      ],
     ];
     for (const [target, replacement] of replacements) {
       const matches = text.split(target).length - 1;
@@ -242,7 +246,7 @@ function patchCodeVComputerUseAvailability(root) {
   return { name: "CodeV computer use availability ignores OAuth Statsig gate", count };
 }
 
-function patchCodeVDefaultFeatureOverrides(root) {
+function patchCodeVDefaultFeatureOverrides(root, { optional = false } = {}) {
   let count = 0;
   for (const file of listFiles(path.join(root, "webview", "assets"), ".js")) {
     const name = path.basename(file);
@@ -285,7 +289,7 @@ function patchCodeVDefaultFeatureOverrides(root) {
     }
     writeFileSync(file, text);
   }
-  return { name: "CodeV default desktop experimental feature overrides", count };
+  return { name: "CodeV default desktop experimental feature overrides", count, optional };
 }
 
 function patchWindowsMicaBackground(root) {
@@ -322,6 +326,12 @@ function patchWindowsMicaBackground(root) {
       } else {
         count += text.split(replacement).length - 1;
       }
+    }
+    if (count === 0) {
+      // ChatGPT 26.707 already ships the desired Windows behavior: opaque
+      // surfaces use a solid background and translucent surfaces keep Mica.
+      const currentBehavior = /opaqueWindowSurfaceEnabled:[A-Za-z_$][\w$]*[\s\S]{0,300}backgroundMaterial:[A-Za-z_$][\w$]*===`win32`\?`none`:null[\s\S]{0,220}backgroundMaterial:`mica`/u;
+      count += text.match(currentBehavior)?.length ?? 0;
     }
     writeFileSync(file, text);
   }

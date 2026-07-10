@@ -92,15 +92,16 @@ begin
        SW_HIDE, ewWaitUntilTerminated, ResultCode);
   Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM CodexZhLauncher.exe /T', '',
        SW_HIDE, ewWaitUntilTerminated, ResultCode);
-  // Kill only node.exe processes launched from inside the install dir (the bundled
-  // cua_node daemon / tray backend) — never the user's own Node installs.
+  // Kill only desktop/node processes launched from inside the install dir. The
+  // official desktop is now ChatGPT.exe, so a global taskkill would also close the
+  // user's stock ChatGPT app; filtering by ExecutablePath avoids that collateral.
   AppDir := ExpandConstant('{app}');
   if AppDir <> '' then
   begin
     // Single quotes only inside -Command so no double quotes nest in the outer "...".
     PsCmd :=
       'Get-CimInstance Win32_Process | Where-Object { ' +
-      '$_.Name -eq ''node.exe'' -and $_.ExecutablePath -and ' +
+      '$_.Name -in @(''node.exe'',''ChatGPT.exe'',''Codex.exe'') -and $_.ExecutablePath -and ' +
       '$_.ExecutablePath -like ''' + AppDir + '\*'' } | ' +
       'ForEach-Object { try { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue } catch {} }';
     Exec('powershell.exe',

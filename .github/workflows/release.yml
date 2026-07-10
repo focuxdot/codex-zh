@@ -14,7 +14,7 @@ on:
         required: false
         type: string
       source_codex_zip_url:
-        description: "Public URL to a zip containing the unpacked official Windows Codex app. Prefer the repository secret for private URLs."
+        description: "Official Windows ChatGPT/Codex source archive (.zip or .msix). Prefer the repository secret for private URLs."
         required: false
         type: string
       source_codex_sha256:
@@ -22,23 +22,23 @@ on:
         required: false
         type: string
       source_codex_label:
-        description: "Optional label used in the installer filename, for example Codex-26.608.1337.0."
+        description: "Optional label used in the installer filename, for example ChatGPT-26.707.31428."
         required: false
         type: string
       source_codex_macos_dmg_url:
-        description: "Public URL to the official Codex macOS arm64 .dmg. Prefer the repository secret for private URLs."
+        description: "Official ChatGPT/Codex macOS arm64 source archive (.zip or .dmg). Legacy input name retained for compatibility."
         required: false
         type: string
       source_codex_macos_dmg_sha256:
-        description: "Optional SHA-256 for the macOS source dmg."
+        description: "Optional SHA-256 for the macOS arm64 source archive."
         required: false
         type: string
       source_codex_macos_x64_dmg_url:
-        description: "Public URL to the official Codex macOS Intel x64 .dmg. Prefer the repository secret for private URLs."
+        description: "Official ChatGPT/Codex macOS Intel x64 source archive (.zip or .dmg). Legacy input name retained for compatibility."
         required: false
         type: string
       source_codex_macos_x64_dmg_sha256:
-        description: "Optional SHA-256 for the macOS Intel x64 source dmg."
+        description: "Optional SHA-256 for the macOS Intel x64 source archive."
         required: false
         type: string
 
@@ -63,6 +63,7 @@ jobs:
       SOURCE_CODEX_LABEL_INPUT: ${{ inputs.source_codex_label }}
       VERSION_INPUT: ${{ inputs.version }}
       RELEASE_TAG: ${{ github.event.release.tag_name || github.ref_name }}
+      PINNED_SOURCE_MANIFEST: release-sources.json
       SOURCE_ARCHIVE: C:\Codex-ZH\source\codex-windows-app.zip
       SOURCE_EXTRACT_ROOT: C:\Codex-ZH\source\expanded
       STAGING_ROOT: C:\Codex-ZH\staging
@@ -101,7 +102,7 @@ jobs:
           "CODEX_ZH_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "CODEX_ZH_BUILD_STAMP=$buildStamp" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-      - name: Download official Codex app source
+      - name: Download official ChatGPT app source
         shell: powershell
         run: |
           $sourceUrl = $env:SOURCE_CODEX_ZIP_URL_INPUT
@@ -109,15 +110,18 @@ jobs:
             $sourceUrl = $env:CODEX_WINDOWS_APP_ZIP_URL
           }
           if (!$sourceUrl) {
-            throw "Set CODEX_WINDOWS_APP_ZIP_URL to a pinned official Codex app source zip."
+            throw "Set CODEX_WINDOWS_APP_ZIP_URL to the pinned official ChatGPT/Codex Windows source archive."
           }
 
           $expectedHash = $env:SOURCE_CODEX_SHA256_INPUT
           if (!$expectedHash) {
+            $expectedHash = node -p "require('./$env:PINNED_SOURCE_MANIFEST').windows.x64.sha256"
+          }
+          if (!$expectedHash) {
             $expectedHash = $env:CODEX_WINDOWS_APP_ZIP_SHA256
           }
           if (!$expectedHash) {
-            throw "Set CODEX_WINDOWS_APP_ZIP_SHA256 so release builds are pinned to one verified Codex source archive."
+            throw "Set CODEX_WINDOWS_APP_ZIP_SHA256 so release builds are pinned to one verified ChatGPT/Codex source archive."
           }
 
           New-Item -ItemType Directory -Force -Path (Split-Path -Parent $env:SOURCE_ARCHIVE) | Out-Null
@@ -129,7 +133,7 @@ jobs:
             throw "Source archive SHA-256 mismatch. Expected $expectedHash, got $actualHash."
           }
 
-      - name: Extract official Codex app source
+      - name: Extract and verify official ChatGPT app source
         shell: powershell
         run: |
           if (Test-Path -LiteralPath $env:SOURCE_EXTRACT_ROOT) {
@@ -138,14 +142,54 @@ jobs:
           New-Item -ItemType Directory -Force -Path $env:SOURCE_EXTRACT_ROOT | Out-Null
           Expand-Archive -LiteralPath $env:SOURCE_ARCHIVE -DestinationPath $env:SOURCE_EXTRACT_ROOT -Force
 
-          $candidates = Get-ChildItem -LiteralPath $env:SOURCE_EXTRACT_ROOT -Filter Codex.exe -File -Recurse |
+          # Raw Microsoft Store MSIX archives percent-encode scoped package
+          # directories as %40name while app.asar references @name. Normalize
+          # those path segments before @electron/asar follows unpacked entries.
+          Get-ChildItem -LiteralPath $env:SOURCE_EXTRACT_ROOT -Directory -Recurse |
+            Where-Object { $_.Name -match '%40' } |
+            Sort-Object { $_.FullName.Length } -Descending |
+            ForEach-Object {
+              $decoded = $_.Name -replace '%40', '@'
+              $destination = Join-Path $_.Parent.FullName $decoded
+              if (Test-Path -LiteralPath $destination) {
+                throw "Cannot normalize MSIX scoped package path because destination exists: $destination"
+              }
+              Rename-Item -LiteralPath $_.FullName -NewName $decoded
+            }
+
+          $candidates = Get-ChildItem -LiteralPath $env:SOURCE_EXTRACT_ROOT -File -Recurse |
+            Where-Object { $_.Name -in @("ChatGPT.exe", "Codex.exe") } |
             Where-Object { Test-Path -LiteralPath (Join-Path $_.DirectoryName "resources\app.asar") } |
-            Sort-Object { $_.FullName.Length }
+            Sort-Object @{ Expression = { if ($_.Name -eq "ChatGPT.exe") { 0 } else { 1 } } }, @{ Expression = { $_.FullName.Length } }
           if (!$candidates) {
-            throw "Could not find a Codex.exe folder with resources\app.asar inside the source zip."
+            throw "Could not find a ChatGPT.exe/Codex.exe folder with resources\app.asar inside the source zip."
           }
 
           $sourceAppDir = $candidates[0].DirectoryName
+          $expectedDesktopVersion = node -p "require('./$env:PINNED_SOURCE_MANIFEST').desktopVersion"
+          if (!$expectedDesktopVersion) {
+            throw "Missing desktopVersion in $env:PINNED_SOURCE_MANIFEST."
+          }
+
+          $versionProbeDir = Join-Path $env:RUNNER_TEMP "chatgpt-source-version"
+          if (Test-Path -LiteralPath $versionProbeDir) {
+            Remove-Item -LiteralPath $versionProbeDir -Force -Recurse
+          }
+          New-Item -ItemType Directory -Force -Path $versionProbeDir | Out-Null
+          Push-Location $versionProbeDir
+          try {
+            & npx.cmd --yes "@electron/asar" extract-file (Join-Path $sourceAppDir "resources\app.asar") package.json
+            if ($LASTEXITCODE -ne 0) {
+              throw "Failed to inspect the official ChatGPT app.asar version."
+            }
+            $actualDesktopVersion = (Get-Content -Raw package.json | ConvertFrom-Json).version
+          } finally {
+            Pop-Location
+          }
+          if ($actualDesktopVersion -ne $expectedDesktopVersion) {
+            throw "ChatGPT desktop kernel version mismatch. Expected $expectedDesktopVersion, got $actualDesktopVersion. Update the pinned Windows archive before releasing."
+          }
+
           "CODEX_SOURCE_APP_DIR=$sourceAppDir" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Build staged app
@@ -308,6 +352,7 @@ jobs:
       MAC_ARCH: ${{ matrix.arch }}
       VERSION_INPUT: ${{ inputs.version }}
       RELEASE_TAG: ${{ github.event.release.tag_name || github.ref_name }}
+      PINNED_SOURCE_MANIFEST: release-sources.json
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -329,43 +374,67 @@ jobs:
             echo "Version must look like SemVer. Got: $version"; exit 1
           fi
           echo "CODEX_ZH_VERSION=$version" >> "$GITHUB_ENV"
-          echo "SOURCE_DMG=$RUNNER_TEMP/codex-macos-app.dmg" >> "$GITHUB_ENV"
-          echo "SOURCE_MOUNT=$RUNNER_TEMP/codex-src-mnt" >> "$GITHUB_ENV"
+          echo "SOURCE_ARCHIVE=$RUNNER_TEMP/chatgpt-macos-source" >> "$GITHUB_ENV"
+          echo "SOURCE_EXPANDED=$RUNNER_TEMP/chatgpt-macos-expanded" >> "$GITHUB_ENV"
+          echo "SOURCE_MOUNT=$RUNNER_TEMP/chatgpt-macos-mount" >> "$GITHUB_ENV"
           echo "STAGING_DIR=$RUNNER_TEMP/staging" >> "$GITHUB_ENV"
           echo "RELEASE_OUTPUT_DIR=$RUNNER_TEMP/release" >> "$GITHUB_ENV"
 
-      - name: Download official Codex macOS app source
+      - name: Download official ChatGPT/Codex macOS app source
         run: |
           case "$MAC_ARCH" in
             arm64)
-              url="${SOURCE_MACOS_DMG_URL_INPUT:-$CODEX_MACOS_APP_DMG_URL}"
-              hash="${SOURCE_MACOS_DMG_SHA256_INPUT:-$CODEX_MACOS_APP_DMG_SHA256}"
+              url="$SOURCE_MACOS_DMG_URL_INPUT"
+              hash="$SOURCE_MACOS_DMG_SHA256_INPUT"
+              legacy_url="$CODEX_MACOS_APP_DMG_URL"
+              legacy_hash="$CODEX_MACOS_APP_DMG_SHA256"
               secret_name="CODEX_MACOS_APP_DMG_URL / CODEX_MACOS_APP_DMG_SHA256"
               ;;
             x64)
-              url="${SOURCE_MACOS_X64_DMG_URL_INPUT:-$CODEX_MACOS_X64_APP_DMG_URL}"
-              hash="${SOURCE_MACOS_X64_DMG_SHA256_INPUT:-$CODEX_MACOS_X64_APP_DMG_SHA256}"
+              url="$SOURCE_MACOS_X64_DMG_URL_INPUT"
+              hash="$SOURCE_MACOS_X64_DMG_SHA256_INPUT"
+              legacy_url="$CODEX_MACOS_X64_APP_DMG_URL"
+              legacy_hash="$CODEX_MACOS_X64_APP_DMG_SHA256"
               secret_name="CODEX_MACOS_X64_APP_DMG_URL / CODEX_MACOS_X64_APP_DMG_SHA256"
               ;;
             *)
               echo "Unsupported MAC_ARCH: $MAC_ARCH"; exit 1
               ;;
           esac
-          [ -n "$url" ] || { echo "Set $secret_name to a pinned official Codex macOS $MAC_ARCH dmg."; exit 1; }
-          [ -n "$hash" ] || { echo "Set $secret_name so release builds are pinned."; exit 1; }
-          curl -fsSL "$url" -o "$SOURCE_DMG"
-          actual="$(shasum -a 256 "$SOURCE_DMG" | awk '{print $1}')"
+          if [ -z "$url" ]; then
+            url="$(node -p "require('./$PINNED_SOURCE_MANIFEST').macos['$MAC_ARCH'].url" 2>/dev/null || true)"
+          fi
+          if [ -z "$hash" ]; then
+            hash="$(node -p "require('./$PINNED_SOURCE_MANIFEST').macos['$MAC_ARCH'].sha256" 2>/dev/null || true)"
+          fi
+          url="${url:-$legacy_url}"
+          hash="${hash:-$legacy_hash}"
+          [ -n "$url" ] || { echo "Set $secret_name or $PINNED_SOURCE_MANIFEST to a pinned official ChatGPT/Codex macOS $MAC_ARCH archive."; exit 1; }
+          [ -n "$hash" ] || { echo "Set $secret_name or $PINNED_SOURCE_MANIFEST so release builds are pinned."; exit 1; }
+          curl -fsSL "$url" -o "$SOURCE_ARCHIVE"
+          actual="$(shasum -a 256 "$SOURCE_ARCHIVE" | awk '{print $1}')"
           expected="$(printf '%s' "$hash" | tr 'A-F' 'a-f')"
-          [ "$actual" = "$expected" ] || { echo "Source dmg SHA-256 mismatch. Expected $expected, got $actual."; exit 1; }
+          [ "$actual" = "$expected" ] || { echo "Source archive SHA-256 mismatch. Expected $expected, got $actual."; exit 1; }
 
-      - name: Extract Codex.app from source dmg
+      - name: Extract ChatGPT.app or Codex.app from source archive
         run: |
-          hdiutil attach "$SOURCE_DMG" -nobrowse -readonly -mountpoint "$SOURCE_MOUNT"
-          app="$(find "$SOURCE_MOUNT" -maxdepth 2 -type d -name 'Codex.app' | head -1)"
-          if [ -z "$app" ]; then echo "Codex.app not found in source dmg."; hdiutil detach "$SOURCE_MOUNT" || true; exit 1; fi
-          ditto "$app" "$RUNNER_TEMP/Codex.app"
-          hdiutil detach "$SOURCE_MOUNT"
-          echo "CODEX_SOURCE_APP=$RUNNER_TEMP/Codex.app" >> "$GITHUB_ENV"
+          mkdir -p "$SOURCE_EXPANDED"
+          if unzip -tq "$SOURCE_ARCHIVE" >/dev/null 2>&1; then
+            ditto -x -k "$SOURCE_ARCHIVE" "$SOURCE_EXPANDED"
+            search_root="$SOURCE_EXPANDED"
+          else
+            hdiutil attach "$SOURCE_ARCHIVE" -nobrowse -readonly -mountpoint "$SOURCE_MOUNT"
+            search_root="$SOURCE_MOUNT"
+          fi
+          app="$(find "$search_root" -maxdepth 3 -type d \( -name 'ChatGPT.app' -o -name 'Codex.app' \) | sort | head -1)"
+          if [ -z "$app" ]; then
+            [ "$search_root" != "$SOURCE_MOUNT" ] || hdiutil detach "$SOURCE_MOUNT" || true
+            echo "ChatGPT.app or Codex.app not found in source archive."
+            exit 1
+          fi
+          ditto "$app" "$RUNNER_TEMP/official-desktop.app"
+          [ "$search_root" != "$SOURCE_MOUNT" ] || hdiutil detach "$SOURCE_MOUNT"
+          echo "CODEX_SOURCE_APP=$RUNNER_TEMP/official-desktop.app" >> "$GITHUB_ENV"
 
       - name: Build staged app and dmg
         run: |
@@ -378,7 +447,8 @@ jobs:
           codesign --verify --deep --strict "$APP"
           expected_arch="$MAC_ARCH"
           if [ "$expected_arch" = "x64" ]; then expected_arch="x86_64"; fi
-          lipo -info "$APP/Contents/MacOS/Codex" | grep -q "$expected_arch"
+          source_executable="$(node -p "require('$STAGING_DIR/codex-zh-build-mac.json').sourceExecutable")"
+          lipo -info "$APP/Contents/MacOS/$source_executable" | grep -q "$expected_arch"
           lipo -info "$APP/Contents/Resources/codex-zh/bin/CodexZhConfig" | grep -q "$expected_arch"
           lipo -info "$APP/Contents/Resources/codex-zh/bin/CodexZhRemoteMenu" | grep -q "$expected_arch"
           # Run the orchestrator self-test with the runner's Node (avoids depending on

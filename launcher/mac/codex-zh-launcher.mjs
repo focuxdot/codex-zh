@@ -2,7 +2,7 @@
 //
 // Invoked by the outer Codex-ZH.app's Contents/MacOS/Codex-ZH bash entry. Mirrors
 // the tail of the Windows launcher: optionally run the relay config wizard, run the
-// runtime init, then launch the inner (patched) Codex.app with CODEX_HOME set.
+// runtime init, then launch the patched ChatGPT/Codex desktop with CODEX_HOME set.
 
 import { spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
@@ -16,12 +16,15 @@ const args = new Set(process.argv.slice(2));
 const has = (...names) => names.some((n) => args.has(n));
 const printResult = has("--print-result");
 
-// This bundle IS the patched Codex.app. The app root is passed via env by the bash
+// This bundle IS the patched official desktop app. The app root is passed via env by the bash
 // entry; fall back to resolving it from this file's location
 // (<app>/Contents/Resources/codex-zh/launcher/mac).
 const appRoot = process.env.CODEX_ZH_APP_ROOT
   || path.resolve(path.dirname(new URL(import.meta.url).pathname), "..", "..", "..", "..", "..");
-const codexMain = path.join(appRoot, "Contents", "MacOS", "Codex");
+const codexMain = ["ChatGPT", "Codex"]
+  .map((name) => path.join(appRoot, "Contents", "MacOS", name))
+  .find((candidate) => existsSync(candidate))
+  ?? path.join(appRoot, "Contents", "MacOS", "ChatGPT");
 const codexCli = path.join(appRoot, "Contents", "Resources", "codex");
 const sourceMarketplace = path.join(appRoot, "Contents", "Resources", "plugins", "openai-bundled");
 

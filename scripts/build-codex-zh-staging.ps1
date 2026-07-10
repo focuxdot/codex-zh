@@ -30,6 +30,17 @@ function Require-Path {
   }
 }
 
+function Get-DesktopExecutable {
+  param([string]$AppDir)
+  foreach ($name in @("ChatGPT.exe", "Codex.exe")) {
+    $candidate = Join-Path $AppDir $name
+    if (Test-Path -LiteralPath $candidate) {
+      return $candidate
+    }
+  }
+  throw "ChatGPT.exe or Codex.exe not found under source app directory: $AppDir"
+}
+
 function Get-NodeCommand {
   $bundled = Join-Path $StageApp "resources\node.exe"
   if (Test-Path $bundled) {
@@ -134,7 +145,7 @@ function Add-ComputerUsePlugin {
 }
 
 Require-Path $SourceAppDir "Source app directory not found"
-Require-Path (Join-Path $SourceAppDir "Codex.exe") "Codex.exe not found"
+$sourceDesktopExe = Get-DesktopExecutable $SourceAppDir
 Require-Path (Join-Path $SourceAppDir "resources\app.asar") "app.asar not found"
 Require-Path (Join-Path $ProjectRoot "scripts\customize-codex-default-zh-cn.mjs") "ASAR customizer not found"
 Require-Path (Join-Path $ProjectRoot "scripts\patch-codex-asar-integrity.mjs") "ASAR integrity patcher not found"
@@ -186,7 +197,7 @@ if (!$SkipAsarCustomization) {
   $oldAsar = Join-Path $workRoot "app.old.asar"
   $appAsar = Join-Path $StageApp "resources\app.asar"
   $appAsarUnpacked = Join-Path $StageApp "resources\app.asar.unpacked"
-  $codexExe = Join-Path $StageApp "Codex.exe"
+  $codexExe = Join-Path $StageApp (Split-Path -Leaf $sourceDesktopExe)
 
   if (Test-Path $workRoot) {
     Remove-DirectoryRobust $workRoot
@@ -227,6 +238,7 @@ if (!$SkipAsarCustomization) {
 $manifest = [ordered]@{
   buildStamp = $BuildStamp
   sourceAppDir = $SourceAppDir
+  sourceExecutable = (Split-Path -Leaf $sourceDesktopExe)
   stageRoot = $StageRoot
   stageApp = $StageApp
 }

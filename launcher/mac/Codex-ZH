@@ -1,7 +1,7 @@
 #!/bin/bash
 # Codex-ZH.app main executable (CFBundleExecutable). This bundle IS the patched
-# Codex.app; we run the launcher orchestrator with the bundle's own Node runtime,
-# and it then starts the in-bundle Codex (Electron). Nesting Codex.app inside
+# official ChatGPT/Codex app; we run the launcher orchestrator with the bundle's
+# own Node runtime, and it then starts the in-bundle Electron executable. Nesting
 # another .app breaks Electron's app-path resolution, so this must be one bundle.
 set -euo pipefail
 

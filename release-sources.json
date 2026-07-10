@@ -1,0 +1,24 @@
+{
+  "desktopVersion": "26.707.31428",
+  "codexCliVersion": "0.144.0-alpha.4",
+  "publishedAt": "2026-07-09T23:16:38Z",
+  "windows": {
+    "x64": {
+      "storeProductId": "9PLM9XGG6VKS",
+      "packageIdentity": "OpenAI.Codex",
+      "packageVersion": "26.707.3748.0",
+      "sha256": "181faac13711ed38213c38644be2fc176f78f65a057cd167dc044935d3e81ab9",
+      "size": 728683082
+    }
+  },
+  "macos": {
+    "arm64": {
+      "url": "https://persistent.oaistatic.com/codex-app-prod/ChatGPT-darwin-arm64-26.707.31428.zip",
+      "sha256": "ffdc351a507105d55d7464e3340302c758b8a54b926711c4b15bf373ccb47d64"
+    },
+    "x64": {
+      "url": "https://persistent.oaistatic.com/codex-app-prod/ChatGPT-darwin-x64-26.707.31428.zip",
+      "sha256": "bf24b45c83d86efc03155bcba5f6e6c1df87219e6ea8ee7c7059ff4d767afeac"
+    }
+  }
+}

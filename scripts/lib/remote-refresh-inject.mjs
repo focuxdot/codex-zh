@@ -20,15 +20,16 @@
 // Both functions follow the customizer contract: return { name, count }; count 0
 // means "did not match" and makes the customizer fail loudly on drift. An
 // already-injected file (marker present) returns count 1 (idempotent).
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 const MARKER = "CODEXZH_EXTERNAL_SESSION_REFRESH";
 
 export function patchRemoteExternalSessionRefreshMain(root) {
   const name = "remote external-session refresh (main watcher)";
-  const file = path.join(root, ".vite", "build", "bootstrap.js");
-  if (!existsSync(file)) {
+  const buildDir = path.join(root, ".vite", "build");
+  const file = findElectronBuildFile(buildDir, /^bootstrap(?:-[^.]+)?\.js$/u);
+  if (!file) {
     return { name, count: 0 };
   }
   const text = readFileSync(file, "utf8");
@@ -53,12 +54,28 @@ export function patchRemoteExternalSessionRefreshPreload(root) {
   if (text.includes(MARKER)) {
     return { name, count: 1 };
   }
-  const anchor = "e.contextBridge.exposeInMainWorld(`electronBridge`,D)";
-  if (!text.includes(anchor)) {
+  const anchorPattern = /([A-Za-z_$][\w$]*\.contextBridge\.exposeInMainWorld\(`electronBridge`,[A-Za-z_$][\w$]*\))/u;
+  const anchor = text.match(anchorPattern)?.[1];
+  if (!anchor) {
     return { name, count: 0 };
   }
   writeFileSync(file, text.split(anchor).join(preloadSnippet() + anchor));
   return { name, count: 1 };
+}
+
+function findElectronBuildFile(buildDir, basenamePattern) {
+  if (!existsSync(buildDir)) return "";
+  const candidates = readdirSync(buildDir)
+    .filter((name) => basenamePattern.test(name))
+    .sort((left, right) => left.length - right.length || left.localeCompare(right));
+  for (const basename of candidates) {
+    const file = path.join(buildDir, basename);
+    const text = readFileSync(file, "utf8");
+    if (text.includes("require(`electron`)") || text.includes('require("electron")')) {
+      return file;
+    }
+  }
+  return "";
 }
 
 function mainSnippet() {

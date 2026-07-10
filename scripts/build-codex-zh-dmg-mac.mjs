@@ -33,7 +33,7 @@ const FIRST_RUN_TXT = `Codex-叉叉（macOS）首次打开说明
      （在“启动台”里搜“终端”，或按 Command+空格 输入“终端”回车）。
   2) 把下面这一整行复制进终端，按回车：
 
-     xattr -dr com.apple.quarantine /Applications/Codex-叉叉.app
+     xattr -d com.apple.quarantine "/Applications/Codex-叉叉.app"
 
   3) 回到“应用程序”，双击 Codex-叉叉 就能打开了。
 

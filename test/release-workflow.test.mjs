@@ -9,7 +9,9 @@ const contributing = readFileSync("CONTRIBUTING.md", "utf8");
 const maintainerPush = readFileSync("scripts/git-push-maintainer.mjs", "utf8");
 const chineseLogs = readFileSync("scripts/validate-chinese-logs.mjs", "utf8");
 const releaseNotes = readFileSync("scripts/generate-release-notes.mjs", "utf8");
+const macDmgBuilder = readFileSync("scripts/build-codex-zh-dmg-mac.mjs", "utf8");
 const changelog = readFileSync("CHANGELOG.md", "utf8");
+const releaseSources = JSON.parse(readFileSync("release-sources.json", "utf8"));
 
 test("release workflow packages Windows installer after GitHub Release publish", () => {
   assert.match(workflow, /push:\s*\n\s+tags:\s*\n\s+- "v\*"/u);
@@ -22,9 +24,12 @@ test("release workflow packages Windows installer after GitHub Release publish",
   assert.match(workflow, /contents: write/u);
   assert.match(workflow, /CODEX_WINDOWS_APP_ZIP_URL/u);
   assert.match(workflow, /CODEX_WINDOWS_APP_ZIP_SHA256/u);
-  assert.match(workflow, /Set CODEX_WINDOWS_APP_ZIP_URL to a pinned official Codex app source zip/u);
+  assert.match(workflow, /pinned official ChatGPT\/Codex Windows source archive/u);
   assert.match(workflow, /Set CODEX_WINDOWS_APP_ZIP_SHA256 so release builds are pinned/u);
   assert.match(workflow, /Source archive SHA-256 mismatch/u);
+  assert.match(workflow, /PINNED_SOURCE_MANIFEST'\)\.windows\.x64\.sha256/u);
+  assert.match(workflow, /ChatGPT desktop kernel version mismatch/u);
+  assert.match(workflow, /"@electron\/asar" extract-file/u);
   assert.doesNotMatch(workflow, /winget\.exe/u);
   assert.doesNotMatch(workflow, /install Codex -s msstore/u);
   assert.match(workflow, /scripts\\build-codex-zh-staging\.ps1/u);
@@ -66,22 +71,39 @@ test("release workflow builds macOS arm64 and Intel x64 dmgs alongside the Windo
   assert.match(workflow, /CODEX_MACOS_X64_APP_DMG_URL/u);
   assert.match(workflow, /CODEX_MACOS_X64_APP_DMG_SHA256/u);
   assert.match(workflow, /source_codex_macos_x64_dmg_url/u);
-  assert.match(workflow, /Set \$secret_name to a pinned official Codex macOS \$MAC_ARCH dmg/u);
-  assert.match(workflow, /Source dmg SHA-256 mismatch/u);
+  assert.match(workflow, /PINNED_SOURCE_MANIFEST: release-sources\.json/u);
+  assert.match(workflow, /official ChatGPT\/Codex macOS \$MAC_ARCH archive/u);
+  assert.match(workflow, /Source archive SHA-256 mismatch/u);
+  assert.match(workflow, /ChatGPT\.app' -o -name 'Codex\.app'/u);
   assert.match(workflow, /scripts\/build-codex-zh-staging-mac\.mjs/u);
   assert.match(workflow, /scripts\/build-codex-zh-dmg-mac\.mjs/u);
   assert.match(workflow, /--arch "\$MAC_ARCH"/u);
-  assert.match(workflow, /lipo -info "\$APP\/Contents\/MacOS\/Codex" \| grep -q "\$expected_arch"/u);
+  assert.match(workflow, /source_executable=/u);
+  assert.match(workflow, /lipo -info "\$APP\/Contents\/MacOS\/\$source_executable" \| grep -q "\$expected_arch"/u);
   assert.match(workflow, /codex-zh-macos-\$\{\{ matrix\.arch \}\}-dmg/u);
   assert.match(workflow, /codex-zh-launcher\.mjs" --self-test --print-result/u);
   assert.match(workflow, /gh release upload "\$RELEASE_TAG" "\$RELEASE_OUTPUT_DIR"\/\*\.dmg/u);
   // The dmg job must pin the source like the Windows job (no unpinned downloads).
-  assert.doesNotMatch(workflow, /hdiutil attach "\$SOURCE_DMG"[^\n]*\n[^\n]*ditto/u);
+  assert.match(workflow, /unzip -tq "\$SOURCE_ARCHIVE"/u);
+  assert.equal(releaseSources.desktopVersion, "26.707.31428");
+  assert.equal(releaseSources.codexCliVersion, "0.144.0-alpha.4");
+  assert.equal(releaseSources.windows.x64.storeProductId, "9PLM9XGG6VKS");
+  assert.equal(releaseSources.windows.x64.packageVersion, "26.707.3748.0");
+  assert.equal(releaseSources.windows.x64.sha256, "181faac13711ed38213c38644be2fc176f78f65a057cd167dc044935d3e81ab9");
+  assert.equal(releaseSources.windows.x64.size, 728683082);
+  for (const arch of ["arm64", "x64"]) {
+    assert.match(releaseSources.macos[arch].url, /ChatGPT-darwin-(?:arm64|x64)-26\.707\.31428\.zip$/u);
+    assert.match(releaseSources.macos[arch].sha256, /^[a-f0-9]{64}$/u);
+  }
+  assert.match(macDmgBuilder, /xattr -d com\.apple\.quarantine "\/Applications\/Codex-叉叉\.app"/u);
+  assert.doesNotMatch(macDmgBuilder, /xattr -dr/u);
 });
 
 test("release workflow keeps source app binary out of the repository", () => {
   assert.match(workflow, /Invoke-WebRequest -Uri \$sourceUrl -OutFile \$env:SOURCE_ARCHIVE/u);
   assert.match(workflow, /Expand-Archive -LiteralPath \$env:SOURCE_ARCHIVE/u);
+  assert.match(workflow, /Raw Microsoft Store MSIX archives percent-encode scoped package/u);
+  assert.match(workflow, /\$decoded = \$_.Name -replace '%40', '@'/u);
   assert.doesNotMatch(workflow, /git add .*SOURCE_ARCHIVE/u);
   assert.doesNotMatch(workflow, /git add .*RELEASE_OUTPUT_DIR/u);
   assert.match(workflow, /git add README\.md/u);

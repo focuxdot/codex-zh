@@ -13,7 +13,14 @@ if ([string]::IsNullOrWhiteSpace($Root)) {
   $Root = Split-Path -Parent $PSScriptRoot
 }
 
-$CodexExe = Join-Path $Root "app\Codex.exe"
+$DesktopExeCandidates = @(
+  (Join-Path $Root "app\ChatGPT.exe"),
+  (Join-Path $Root "app\Codex.exe")
+)
+$CodexExe = $DesktopExeCandidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+if (!$CodexExe) {
+  $CodexExe = $DesktopExeCandidates[0]
+}
 $CodexCliExe = Join-Path $Root "app\resources\codex.exe"
 $NodeExe = Join-Path $Root "app\resources\node.exe"
 $ConfigHome = Join-Path $env:USERPROFILE ".codex"
@@ -1069,7 +1076,7 @@ if ($SelfTest) {
 }
 
 if (!(Test-Path $CodexExe)) {
-  throw "Codex.exe not found: $CodexExe"
+  throw "ChatGPT/Codex desktop executable not found: $CodexExe"
 }
 
 if ($NoLaunch) {

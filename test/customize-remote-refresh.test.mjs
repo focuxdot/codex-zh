@@ -68,6 +68,21 @@ test("main watcher patch injects, is idempotent, and stays valid JS", () => {
   }
 });
 
+test("main watcher patch follows ChatGPT's content-hashed bootstrap filename", () => {
+  const root = makeRoot({
+    "early-bootstrap.js": "require(`./bootstrap-B6OtqZMf.js`);\n",
+    "bootstrap-B6OtqZMf.js": FIXTURE_BOOTSTRAP,
+  });
+  try {
+    const res = patchRemoteExternalSessionRefreshMain(root);
+    assert.equal(res.count, 1);
+    const file = join(root, ".vite", "build", "bootstrap-B6OtqZMf.js");
+    assert.ok(readFileSync(file, "utf8").includes(MARKER));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("main watcher patch fails loudly (count 0) when electron require is absent", () => {
   const root = makeRoot({ "bootstrap.js": "console.log('unexpected build');\n" });
   try {
@@ -93,6 +108,23 @@ test("preload patch injects before exposeInMainWorld and stays valid JS", () => 
     );
     const chk = nodeCheck(file);
     assert.ok(chk.ok, `preload.js should be valid JS: ${chk.stderr}`);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("preload patch accepts minified ChatGPT electronBridge identifiers", () => {
+  const root = makeRoot({
+    "preload.js": FIXTURE_PRELOAD.replaceAll("var D=", "var j=").replaceAll("electronBridge`,D", "electronBridge`,j"),
+  });
+  try {
+    const res = patchRemoteExternalSessionRefreshPreload(root);
+    assert.equal(res.count, 1);
+    const file = join(root, ".vite", "build", "preload.js");
+    const patched = readFileSync(file, "utf8");
+    assert.ok(patched.includes(MARKER));
+    assert.ok(patched.indexOf(MARKER) < patched.indexOf("exposeInMainWorld(`electronBridge`,j)"));
+    assert.ok(nodeCheck(file).ok);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

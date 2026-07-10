@@ -6,7 +6,7 @@ import process from "node:process";
 import { createHash } from "node:crypto";
 
 const usage = `Usage:
-  node scripts/build-codex-zh-staging-mac.mjs --source-app <official Codex.app> --out-dir <staging dir> [options]
+  node scripts/build-codex-zh-staging-mac.mjs --source-app <official ChatGPT.app or Codex.app> --out-dir <staging dir> [options]
 
 Options:
   --project-root <dir>     Repo root (default: cwd)
@@ -16,10 +16,10 @@ Options:
   --skip-asar              Copy + sign without patching the asar (debug)
   --skip-sign              Patch without re-signing (debug)
 
-Produces <out-dir>/Codex-叉叉.app: an outer launcher bundle whose Contents/Resources/
-app/Codex.app is the official macOS Codex app with the Codex-叉叉 zh-CN + capability
-asar patches applied, Info.plist ElectronAsarIntegrity updated, and both bundles
-re-signed (ad-hoc by default). macOS arm64 and x64 are supported.
+Produces <out-dir>/Codex-叉叉.app from the official ChatGPT/Codex desktop bundle,
+with the Codex-叉叉 zh-CN + capability patches applied, Info.plist
+ElectronAsarIntegrity updated, and the bundle re-signed (ad-hoc by default).
+macOS arm64 and x64 are supported.
 `;
 
 const args = parseArgs(process.argv.slice(2));
@@ -50,14 +50,15 @@ requirePath(path.join(projectRoot, "launcher", "remote-backend-core.mjs"), "shar
 // Validate the source bundle shape.
 const srcAsar = path.join(sourceApp, "Contents", "Resources", "app.asar");
 const srcPlist = path.join(sourceApp, "Contents", "Info.plist");
-const srcMain = path.join(sourceApp, "Contents", "MacOS", "Codex");
+const sourceExecutable = readPlistKey(srcPlist, "CFBundleExecutable");
+const srcMain = path.join(sourceApp, "Contents", "MacOS", sourceExecutable);
 requirePath(srcAsar, "source app.asar");
 requirePath(srcPlist, "source Info.plist");
-requirePath(srcMain, "source Contents/MacOS/Codex");
-const sourceMainArch = assertMachOArch(srcMain, arch, "source Contents/MacOS/Codex");
+requirePath(srcMain, `source Contents/MacOS/${sourceExecutable}`);
+const sourceMainArch = assertMachOArch(srcMain, arch, `source Contents/MacOS/${sourceExecutable}`);
 
-// Single bundle: Codex-叉叉.app IS the patched Codex.app (with our launcher inserted
-// as CFBundleExecutable). Nesting Codex.app inside another .app breaks Electron's
+// Single bundle: Codex-叉叉.app IS the patched official desktop app (with our launcher
+// inserted as CFBundleExecutable). Nesting it inside another .app breaks Electron's
 // app-path resolution, so there is no separate outer/inner bundle.
 const stagedApp = path.join(outDir, "Codex-叉叉.app");
 const workRoot = path.join(outDir, ".work");
@@ -68,7 +69,7 @@ rmSync(workRoot, { force: true, recursive: true });
 mkdirSync(workRoot, { recursive: true });
 
 // 1) Copy the bundle with ditto to preserve symlinks / bundle metadata.
-log("Copying Codex.app -> Codex-叉叉.app with ditto ...");
+log(`Copying ${path.basename(sourceApp)} -> Codex-叉叉.app with ditto ...`);
 runOrThrow("ditto", [sourceApp, stagedApp]);
 
 const stagedAsar = path.join(stagedApp, "Contents", "Resources", "app.asar");
@@ -92,9 +93,6 @@ if (!skipAsar) {
     "--out-asar", patchedAsar,
     "--platform", "mac",
   ];
-  if (arch === "x64") {
-    customizerArgs.push("--allow-missing-mac-feature-overrides", "true");
-  }
   // Reproduce the original unpack layout exactly: the macOS bundle unpacks whole
   // native-module directories (not just *.node), so disable the default --unpack
   // glob and unpack precisely the packages that are unpacked in the source bundle.
@@ -163,6 +161,7 @@ const manifest = {
   version,
   arch,
   sourceAppName: path.basename(sourceApp),
+  sourceExecutable,
   appName: path.basename(stagedApp),
   sourceMainArch,
   asarHeaderHash: asarHash,
@@ -215,15 +214,15 @@ function assembleLauncher() {
     runOrThrow("swiftc", ["-swift-version", "5", "-target", swiftTarget, "-O", "-o", path.join(binDir, out), swiftSrc]);
   }
 
-  // Install the bash entry as a new executable alongside the original Codex binary,
+  // Install the bash entry alongside the original ChatGPT/Codex binary,
   // then make it the bundle's CFBundleExecutable so LaunchServices runs it first.
   const entryDest = path.join(macOSDir, "Codex-ZH");
   cpSync(path.join(macLauncherDir, "Codex-ZH"), entryDest);
   runOrThrow("chmod", ["755", entryDest]);
   const infoPlist = path.join(contents, "Info.plist");
   runOrThrow("/usr/libexec/PlistBuddy", ["-c", "Set :CFBundleExecutable Codex-ZH", infoPlist]);
-  // Give Codex-ZH its own bundle identity. The stock app ships as
-  // com.openai.codex / CFBundleDisplayName "Codex"; if we keep those, macOS
+  // Give Codex-ZH its own bundle identity. The stock app still ships as
+  // com.openai.codex, now with CFBundleDisplayName "ChatGPT"; if we keep it, macOS
   // LaunchServices treats Codex-ZH and an installed official Codex as the SAME
   // app — clicking the icon can open the wrong one, the Dock label flips to
   // "Codex", and the official Sparkle feed could "update" us back to stock.
@@ -231,8 +230,17 @@ function assembleLauncher() {
   // on-disk base name ("Codex-叉叉") or macOS ignores it for anti-spoofing.
   setPlistKey(infoPlist, "CFBundleIdentifier", "ai.wokey.codex-zh", "string");
   setPlistKey(infoPlist, "CFBundleDisplayName", "Codex-叉叉", "string");
-  // CFBundleName is intentionally left as "Codex" so the Electron app's userData
-  // / Application Support path is unchanged (login stays in ~/.codex regardless).
+  // Keep the source CFBundleName so the Electron app's existing userData path and
+  // login/session storage continue to follow the official desktop runtime.
+}
+
+function readPlistKey(plist, key) {
+  requirePath(plist, "source Info.plist");
+  const value = runOrThrow("/usr/libexec/PlistBuddy", ["-c", `Print :${key}`, plist]).trim();
+  if (!value || value.includes("/") || value.includes("\\")) {
+    fail(`Invalid ${key} in source Info.plist: ${value || "<empty>"}`);
+  }
+  return value;
 }
 
 // PlistBuddy "Set" fails if the key is absent; fall back to "Add".

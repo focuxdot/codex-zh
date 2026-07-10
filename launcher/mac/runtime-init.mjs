@@ -175,8 +175,8 @@ export function clearElectronRendererCache(paths) {
   }
 }
 
-// Run the full runtime init. sourceMarketplace is the inner Codex.app's bundled
-// marketplace: <inner>/Contents/Resources/plugins/openai-bundled.
+// Run the full runtime init. sourceMarketplace is the official ChatGPT/Codex
+// desktop bundle's marketplace: <app>/Contents/Resources/plugins/openai-bundled.
 export function initializeRuntime({ paths, sourceMarketplace, now = new Date() }) {
   saveCodexDesktopDefaults(paths, now);
   const capabilities = ensureBundledMarketplace(paths, sourceMarketplace);
