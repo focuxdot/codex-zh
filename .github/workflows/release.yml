@@ -50,9 +50,43 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  release-metadata:
+    name: Create release metadata
+    if: startsWith(github.event.release.tag_name || github.ref_name, 'v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+
+      - name: Create release for tag push
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name || github.ref_name }}
+        run: |
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $RELEASE_TAG already exists."
+            exit 0
+          fi
+          notes="$RUNNER_TEMP/codex-zh-release-notes.md"
+          node ./scripts/generate-release-notes.mjs --tag "$RELEASE_TAG" --out "$notes"
+          gh release create "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "Codex-叉叉 $RELEASE_TAG" \
+            --notes-file "$notes"
+
   windows-installer:
     name: Build Windows installer
-    if: startsWith(github.event.release.tag_name || github.ref_name, 'v')
+    # Windows remains opt-in until CODEX_WINDOWS_APP_ZIP_URL is updated to the
+    # pinned ChatGPT source. This must not block a macOS-only release.
+    if: startsWith(github.event.release.tag_name || github.ref_name, 'v') && vars.CODEX_ZH_BUILD_WINDOWS == 'true'
+    needs: release-metadata
     runs-on: windows-2022
     env:
       CODEX_WINDOWS_APP_ZIP_URL: ${{ secrets.CODEX_WINDOWS_APP_ZIP_URL }}
@@ -334,7 +368,7 @@ jobs:
   macos-installer:
     name: Build macOS ${{ matrix.arch }} dmg
     if: startsWith(github.event.release.tag_name || github.ref_name, 'v')
-    needs: windows-installer
+    needs: release-metadata
     runs-on: macos-14
     strategy:
       fail-fast: false
@@ -476,8 +510,8 @@ jobs:
 
   update-readme:
     name: Update README download links
-    if: (github.event_name == 'release' || github.event_name == 'push') && (always() && needs.windows-installer.result == 'success' && needs.macos-installer.result == 'success')
-    needs: [windows-installer, macos-installer]
+    if: (github.event_name == 'release' || github.event_name == 'push') && (always() && needs.macos-installer.result == 'success')
+    needs: [release-metadata, macos-installer]
     runs-on: ubuntu-latest
     env:
       RELEASE_TAG: ${{ github.event.release.tag_name || github.ref_name }}

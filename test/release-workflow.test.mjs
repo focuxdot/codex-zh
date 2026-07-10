@@ -18,6 +18,8 @@ test("release workflow packages Windows installer after GitHub Release publish",
   assert.match(workflow, /release:\s*\n\s+types:\s*\n\s+- published/u);
   assert.match(workflow, /if: startsWith\(github\.event\.release\.tag_name \|\| github\.ref_name, 'v'\)/u);
   assert.match(workflow, /runs-on: windows-2022/u);
+  assert.match(workflow, /vars\.CODEX_ZH_BUILD_WINDOWS == 'true'/u);
+  assert.match(workflow, /needs: release-metadata/u);
   assert.match(workflow, /actions\/checkout@v6/u);
   assert.match(workflow, /actions\/setup-node@v6/u);
   assert.match(workflow, /node-version: "24"/u);
@@ -63,6 +65,7 @@ test("release workflow packages Windows installer after GitHub Release publish",
 });
 
 test("release workflow builds macOS arm64 and Intel x64 dmgs alongside the Windows installer", () => {
+  assert.match(workflow, /release-metadata:/u);
   assert.match(workflow, /macos-installer:/u);
   assert.match(workflow, /matrix:\s*\n\s+arch: \[arm64, x64\]/u);
   assert.match(workflow, /runs-on: macos-14/u);
@@ -83,6 +86,7 @@ test("release workflow builds macOS arm64 and Intel x64 dmgs alongside the Windo
   assert.match(workflow, /codex-zh-macos-\$\{\{ matrix\.arch \}\}-dmg/u);
   assert.match(workflow, /codex-zh-launcher\.mjs" --self-test --print-result/u);
   assert.match(workflow, /gh release upload "\$RELEASE_TAG" "\$RELEASE_OUTPUT_DIR"\/\*\.dmg/u);
+  assert.match(workflow, /needs: \[release-metadata, macos-installer\]/u);
   // The dmg job must pin the source like the Windows job (no unpinned downloads).
   assert.match(workflow, /unzip -tq "\$SOURCE_ARCHIVE"/u);
   assert.equal(releaseSources.desktopVersion, "26.707.31428");

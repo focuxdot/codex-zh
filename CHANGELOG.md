@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.5.1
+
+- macOS 发布流程改为独立构建和上传 Apple 芯片与 Intel x64 DMG，不再被暂未更新的 Windows 上游安装包阻塞；Windows 包待其官方源完成更新后再显式启用。
+
 ## v0.5.0
 
 - 桌面内核升级到官方 ChatGPT 26.707.31428，内置 Codex CLI 0.144.0-alpha.4，完整继承新版 goals、hooks、memory、多智能体、图像生成与工作区依赖等能力。
