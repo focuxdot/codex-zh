@@ -1,5 +1,9 @@
 # Changelog
 
+## [Unreleased]
+
+- **手机远程接管与会话围观能力已独立为开源项目 [focuxdot/CXX](https://github.com/focuxdot/CXX)，不再内置于 Codex-ZH 中文版。** 若需要这些能力，请单独安装 CXX（装在现有 Codex 旁即可，支持 ChatGPT 与 Claude Code）。相关功能从打包和集成中移除，代码库回归到纯粹的中文 UI 补丁与中转配置工具包。
+
 ## v0.5.1
 
 - macOS 发布流程改为独立构建和上传 Apple 芯片与 Intel x64 DMG，不再被暂未更新的 Windows 上游安装包阻塞；Windows 包待其官方源完成更新后再显式启用。
