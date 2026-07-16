@@ -7,7 +7,6 @@ on:
     paths:
       - "README.md"
       - "site/**"
-      - "remote/web/**"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
 
@@ -35,14 +34,6 @@ jobs:
         uses: actions/configure-pages@v5
         with:
           enablement: true
-
-      - name: Add Remote web client (PWA)
-        run: |
-          mkdir -p site/remote/icons
-          cp remote/web/index.html site/remote/index.html
-          cp remote/web/manifest.webmanifest site/remote/manifest.webmanifest
-          cp remote/web/sw.js site/remote/sw.js
-          cp remote/web/icons/*.png site/remote/icons/
 
       - name: Upload site
         uses: actions/upload-pages-artifact@v4

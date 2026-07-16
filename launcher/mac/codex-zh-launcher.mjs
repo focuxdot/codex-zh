@@ -81,21 +81,6 @@ function launchCodex() {
   child.unref();
 }
 
-// 每次启动 Codex 时顺带拉起菜单栏「远程接管」控制程序，作为不依赖配置窗口的
-// 入口（已配置过中转站的用户不会再看到配置窗口，否则就够不到远程设置）。
-// 菜单程序自带单实例锁，与启用后常驻的 LaunchAgent 版本不会重复。可选、不阻塞。
-function spawnRemoteMenu() {
-  try {
-    const menuBin = path.join(appRoot, "Contents", "Resources", "codex-zh", "bin", "CodexZhRemoteMenu");
-    const remoteBackend = path.join(appRoot, "Contents", "Resources", "codex-zh", "launcher", "mac", "remote-backend.mjs");
-    if (!existsSync(menuBin)) return;
-    const child = spawn(menuBin, [process.execPath, remoteBackend], { detached: true, stdio: "ignore" });
-    child.unref();
-  } catch {
-    // 远程菜单是可选功能，绝不阻塞 Codex 启动
-  }
-}
-
 async function main() {
   // Self-test: verify the in-bundle Codex is present and runnable, no launch.
   if (has("--self-test")) {
@@ -136,7 +121,6 @@ async function main() {
 
   initializeRuntime({ paths, sourceMarketplace });
   launchCodex();
-  spawnRemoteMenu();
   emit({ status: "launched", launched: true, codexHome: paths.codexHome, appRoot });
 }
 

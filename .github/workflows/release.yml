@@ -484,7 +484,6 @@ jobs:
           source_executable="$(node -p "require('$STAGING_DIR/codex-zh-build-mac.json').sourceExecutable")"
           lipo -info "$APP/Contents/MacOS/$source_executable" | grep -q "$expected_arch"
           lipo -info "$APP/Contents/Resources/codex-zh/bin/CodexZhConfig" | grep -q "$expected_arch"
-          lipo -info "$APP/Contents/Resources/codex-zh/bin/CodexZhRemoteMenu" | grep -q "$expected_arch"
           # Run the orchestrator self-test with the runner's Node (avoids depending on
           # the bundle's re-signed Node under CI security policy).
           result="$(CODEX_ZH_APP_ROOT="$APP" node "$APP/Contents/Resources/codex-zh/launcher/mac/codex-zh-launcher.mjs" --self-test --print-result)"

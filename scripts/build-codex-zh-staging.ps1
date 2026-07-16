@@ -152,11 +152,6 @@ Require-Path (Join-Path $ProjectRoot "scripts\patch-codex-asar-integrity.mjs") "
 Require-Path (Join-Path $ProjectRoot "launcher\CodexZhLauncher.ps1") "launcher not found"
 Require-Path (Join-Path $ProjectRoot "native\Build-CodexZhLauncher.ps1") "native launcher build script not found"
 Require-Path (Join-Path $ProjectRoot "native\CodexZhLauncher.cs") "native launcher source not found"
-Require-Path (Join-Path $ProjectRoot "remote\daemon\src\main.mjs") "remote daemon not found"
-Require-Path (Join-Path $ProjectRoot "launcher\remote-backend-core.mjs") "remote backend core not found"
-Require-Path (Join-Path $ProjectRoot "launcher\win\remote-backend.mjs") "windows remote backend not found"
-Require-Path (Join-Path $ProjectRoot "native\Build-CodexZhTray.ps1") "native tray build script not found"
-Require-Path (Join-Path $ProjectRoot "native\CodexZhTray.cs") "native tray source not found"
 
 if (Test-Path $StageRoot) {
   Remove-DirectoryRobust $StageRoot
@@ -173,19 +168,6 @@ Copy-Item -Force (Join-Path $ProjectRoot "native\CodexZhLauncher.cs") (Join-Path
 & (Join-Path $ProjectRoot "native\Build-CodexZhLauncher.ps1") -SourceRoot $StageRoot -OutFile (Join-Path $StageRoot "CodexZhLauncher.exe")
 if ($LASTEXITCODE -ne 0) {
   throw "Native launcher build failed with exit code $LASTEXITCODE."
-}
-
-# Remote subsystem: daemon source + Windows backend/core + tray exe.
-# Layout mirrors macOS: <root>\remote\daemon\src\main.mjs (keepalive target),
-# <root>\launcher\{remote-backend-core.mjs, win\remote-backend.mjs} (tray backend).
-Copy-DirectoryRobust -Source (Join-Path $ProjectRoot "remote") -Destination (Join-Path $StageRoot "remote")
-Remove-AppleDoubleFiles (Join-Path $StageRoot "remote")
-Copy-Item -Force (Join-Path $ProjectRoot "launcher\remote-backend-core.mjs") $LauncherDir
-Copy-DirectoryRobust -Source (Join-Path $ProjectRoot "launcher\win") -Destination (Join-Path $LauncherDir "win")
-Copy-Item -Force (Join-Path $ProjectRoot "native\CodexZhTray.cs") (Join-Path $StageRoot "native")
-& (Join-Path $ProjectRoot "native\Build-CodexZhTray.ps1") -SourceRoot $StageRoot -OutFile (Join-Path $StageRoot "CodexZhTray.exe")
-if ($LASTEXITCODE -ne 0) {
-  throw "Native tray build failed with exit code $LASTEXITCODE."
 }
 
 if (!$SkipAsarCustomization) {

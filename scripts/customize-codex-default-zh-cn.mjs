@@ -4,11 +4,6 @@ import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, write
 import path from "node:path";
 import process from "node:process";
 
-import {
-  patchRemoteExternalSessionRefreshMain,
-  patchRemoteExternalSessionRefreshPreload,
-} from "./lib/remote-refresh-inject.mjs";
-
 const usage = `Usage:
   node scripts/customize-codex-default-zh-cn.mjs --asar-dir <extracted-app-asar-dir> [--asar-unpacked-dir <app.asar.unpacked-dir>] --work-dir <patched-work-dir> --out-asar <output-app.asar> [--platform windows|mac]
 
@@ -52,8 +47,6 @@ const patches = platform === "mac"
       // Keep the old patch for earlier Codex sources, but do not fail when the
       // legacy feature-list shape has disappeared from a newer official build.
       patchMacDefaultFeatureOverrides(workDir, { optional: true }),
-      patchRemoteExternalSessionRefreshMain(workDir),
-      patchRemoteExternalSessionRefreshPreload(workDir),
     ]
   : [
       patchLocaleOverrideDefaults(workDir),

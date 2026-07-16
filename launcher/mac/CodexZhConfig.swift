@@ -133,9 +133,7 @@ final class ConfigController: NSObject, NSWindowDelegate {
             button.bezelStyle = .rounded
         }
 
-        let remoteButton = NSButton(title: "手机远程接管…", target: self, action: #selector(openRemote))
-        remoteButton.bezelStyle = .rounded
-        let leftButtons = NSStackView(views: [testButton, remoteButton])
+        let leftButtons = NSStackView(views: [testButton])
         leftButtons.spacing = 10
         let rightButtons = NSStackView(views: [skipButton, saveButton, launchButton])
         rightButtons.spacing = 10
@@ -288,24 +286,6 @@ final class ConfigController: NSObject, NSWindowDelegate {
     }
 
     @objc func skip() { finish("skip") }
-
-    // 启动菜单栏远程控制程序（bootstrap 入口）。菜单二进制是本程序的同目录兄弟，
-    // remote-backend.mjs 是 wizard-backend.mjs 的同目录兄弟。
-    @objc func openRemote() {
-        let selfDir = URL(fileURLWithPath: CommandLine.arguments[0]).deletingLastPathComponent()
-        let menuBin = selfDir.appendingPathComponent("CodexZhRemoteMenu")
-        let remoteBackend = URL(fileURLWithPath: backendScript)
-            .deletingLastPathComponent().appendingPathComponent("remote-backend.mjs")
-        guard FileManager.default.isExecutableFile(atPath: menuBin.path) else {
-            setStatus("远程控制程序缺失。", isError: true)
-            return
-        }
-        let process = Process()
-        process.executableURL = menuBin
-        process.arguments = [nodePath, remoteBackend.path]
-        try? process.run() // 独立 accessory 进程，不等待
-        setStatus("已打开菜单栏「远程接管」，见屏幕右上角。", isError: false)
-    }
 
     @objc func save() {
         guard let file = writeTempInput(gatherInput()) else { return }

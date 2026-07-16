@@ -45,7 +45,6 @@ requirePath(customizer, "customizer script");
 requirePath(integrityPatcher, "integrity patcher script");
 requirePath(path.join(macLauncherDir, "Codex-ZH"), "mac launcher entry (launcher/mac/Codex-ZH)");
 requirePath(path.join(macLauncherDir, "codex-zh-launcher.mjs"), "mac launcher orchestrator");
-requirePath(path.join(projectRoot, "launcher", "remote-backend-core.mjs"), "shared remote backend core (launcher/remote-backend-core.mjs)");
 
 // Validate the source bundle shape.
 const srcAsar = path.join(sourceApp, "Contents", "Resources", "app.asar");
@@ -184,30 +183,11 @@ function assembleLauncher() {
   // way in the repo and inside the bundle.
   cpSync(srcDir, path.join(codexZhDir, "src"), { recursive: true });
   cpSync(macLauncherDir, path.join(codexZhDir, "launcher", "mac"), { recursive: true });
-  // launcher/mac/remote-backend.mjs imports ../remote-backend-core.mjs (the shared
-  // cross-platform command surface). It lives one level up from launcher/mac, so it
-  // is not covered by the copy above — bundle it explicitly or the daemon menu's
-  // enable/status/pair CLI dies with ERR_MODULE_NOT_FOUND at import time.
-  cpSync(
-    path.join(projectRoot, "launcher", "remote-backend-core.mjs"),
-    path.join(codexZhDir, "launcher", "remote-backend-core.mjs"),
-  );
-
-  // Bundle the Remote daemon tree so remote-backend.mjs resolves ../../remote/... and
-  // the LaunchAgent can run <bundle>/.../remote/daemon/src/main.mjs with the bundle's
-  // Node + same-version codex CLI. Placed before the single --deep sign pass below,
-  // so all these files are covered by the bundle signature automatically.
-  const remoteSrc = path.join(projectRoot, "remote");
-  requirePath(remoteSrc, "remote subsystem (remote/)");
-  cpSync(remoteSrc, path.join(codexZhDir, "remote"), {
-    recursive: true,
-    filter: (src) => !/[\\/](node_modules|\.wrangler)([\\/]|$)/.test(src),
-  });
 
   // Compile the native windows into Contents/Resources/codex-zh/bin.
   const binDir = path.join(codexZhDir, "bin");
   mkdirSync(binDir, { recursive: true });
-  for (const [name, out] of [["CodexZhConfig", "CodexZhConfig"], ["CodexZhRemoteMenu", "CodexZhRemoteMenu"]]) {
+  for (const [name, out] of [["CodexZhConfig", "CodexZhConfig"]]) {
     const swiftSrc = path.join(macLauncherDir, `${name}.swift`);
     requirePath(swiftSrc, `swift source (launcher/mac/${name}.swift)`);
     log(`Compiling ${name}.swift ...`);

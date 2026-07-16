@@ -42,7 +42,6 @@ Source: "{#SourceRoot}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs
 [Icons]
 Name: "{group}\Codex-叉叉"; Filename: "{app}\CodexZhLauncher.exe"; WorkingDir: "{app}"; IconFilename: "{app}\app\resources\icon.ico"
 Name: "{group}\Codex 中转站配置"; Filename: "{app}\CodexZhLauncher.exe"; Parameters: "--configure"; WorkingDir: "{app}"; IconFilename: "{app}\app\resources\icon.ico"
-Name: "{group}\手机远程接管"; Filename: "{app}\CodexZhTray.exe"; Parameters: """{app}\app\resources\cua_node\bin\node.exe"" ""{app}\launcher\win\remote-backend.mjs"""; WorkingDir: "{app}"; IconFilename: "{app}\app\resources\icon.ico"
 Name: "{autodesktop}\Codex-叉叉"; Filename: "{app}\CodexZhLauncher.exe"; WorkingDir: "{app}"; IconFilename: "{app}\app\resources\icon.ico"; Tasks: desktopicon
 
 [Tasks]
@@ -57,6 +56,8 @@ Type: files; Name: "{autoprograms}\Codex-ZH\Codex 中转站配置.lnk"
 Type: files; Name: "{autoprograms}\Codex-ZH\手机远程接管.lnk"
 Type: filesandordirs; Name: "{autoprograms}\Codex-ZH"
 Type: files; Name: "{autodesktop}\Codex-ZH.lnk"
+; Remote takeover moved to the standalone CXX project; drop the leftover shortcut on upgrade.
+Type: files; Name: "{group}\手机远程接管.lnk"
 
 [Run]
 Filename: "{app}\CodexZhLauncher.exe"; Parameters: "--no-launch"; WorkingDir: "{app}"; Flags: runhidden

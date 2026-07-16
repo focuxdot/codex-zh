@@ -1107,19 +1107,6 @@ $env:CODEX_HOME = $ConfigHome
 Remove-Item Env:\CODEX_ELECTRON_USER_DATA_PATH -ErrorAction SilentlyContinue
 Start-Process -FilePath $CodexExe -WorkingDirectory (Split-Path -Parent $CodexExe)
 
-# Spawn the Remote tray controller (mirrors macOS spawnRemoteMenu): best-effort,
-# detached; the tray self-guards with a single-instance mutex. Never blocks launch.
-try {
-  $trayExe = Join-Path $Root "CodexZhTray.exe"
-  $trayNode = Join-Path $Root "app\resources\cua_node\bin\node.exe"
-  $trayBackend = Join-Path $Root "launcher\win\remote-backend.mjs"
-  if ((Test-Path $trayExe) -and (Test-Path $trayNode) -and (Test-Path $trayBackend)) {
-    Start-Process -FilePath $trayExe -ArgumentList @("`"$trayNode`"", "`"$trayBackend`"") | Out-Null
-  }
-} catch {
-  # tray is optional; ignore failures so Codex still launches
-}
-
 $result = New-Result -Status "launched" -Launched $true
 if ($PrintResult) {
   $result | ConvertTo-Json -Compress
