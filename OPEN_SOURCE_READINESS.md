@@ -89,7 +89,7 @@ Repository secrets for automatic release builds:
 | --- | --- | --- |
 | `CODEX_WINDOWS_APP_ZIP_URL` | Yes | Private or public URL to the pinned official Windows ChatGPT/Codex `.zip` or `.msix` archive. |
 | `CODEX_WINDOWS_APP_ZIP_SHA256` | Legacy fallback | SHA-256 of the source archive. `release-sources.json` is authoritative unless a workflow input explicitly overrides it. |
-| `CODEX_WINDOWS_APP_LABEL` | Recommended | Installer filename label, for example `ChatGPT-26.707.31428`. |
+| `CODEX_WINDOWS_APP_LABEL` | Recommended | Installer filename label, for example `ChatGPT-26.715.31925`. |
 
 Windows 打包目前是显式开启项：只有仓库变量 `CODEX_ZH_BUILD_WINDOWS=true` 时才运行。待 `CODEX_WINDOWS_APP_ZIP_URL` 切换到 `release-sources.json` 所锁定的新版 ChatGPT Windows 归档后再开启；macOS arm64/x64 发布不依赖此项。
 

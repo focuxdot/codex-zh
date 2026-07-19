@@ -22,7 +22,7 @@ on:
         required: false
         type: string
       source_codex_label:
-        description: "Optional label used in the installer filename, for example ChatGPT-26.707.31428."
+        description: "Optional label used in the installer filename, for example ChatGPT-26.715.31925."
         required: false
         type: string
       source_codex_macos_dmg_url:

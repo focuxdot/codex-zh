@@ -58,6 +58,13 @@ Type: filesandordirs; Name: "{autoprograms}\Codex-ZH"
 Type: files; Name: "{autodesktop}\Codex-ZH.lnk"
 ; Remote takeover moved to the standalone CXX project; drop the leftover shortcut on upgrade.
 Type: files; Name: "{group}\手机远程接管.lnk"
+; Remove the legacy bundled Remote payload when upgrading from v0.5.1 or older.
+; User-owned pairing/config data under %USERPROFILE%\.codex-zh\remote is preserved.
+Type: filesandordirs; Name: "{app}\remote"
+Type: filesandordirs; Name: "{app}\launcher\win"
+Type: files; Name: "{app}\launcher\remote-backend-core.mjs"
+Type: files; Name: "{app}\CodexZhTray.exe"
+Type: files; Name: "{app}\native\CodexZhTray.cs"
 
 [Run]
 Filename: "{app}\CodexZhLauncher.exe"; Parameters: "--no-launch"; WorkingDir: "{app}"; Flags: runhidden
@@ -85,6 +92,10 @@ var
 begin
   // End the running Remote keepalive task instance (it respawns codex.exe / node.exe).
   Exec(ExpandConstant('{sys}\schtasks.exe'), '/End /TN CodexZhRemote', '',
+       SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  // The Remote module now lives in standalone CXX. Unregister the old task during
+  // an in-place upgrade so it cannot restart against files from the old install.
+  Exec(ExpandConstant('{sys}\schtasks.exe'), '/Delete /TN CodexZhRemote /F', '',
        SW_HIDE, ewWaitUntilTerminated, ResultCode);
   // Kill the CLI, tray and launcher by image name (/T also drops their children).
   Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM codex.exe /T', '',

@@ -9,6 +9,7 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { parseTomlSections } from "../../src/config-merge.mjs";
+import { cleanupLegacyRemote } from "./legacy-remote-cleanup.mjs";
 import { macCodexPaths, initializeRuntime } from "./runtime-init.mjs";
 import { runWizard } from "./wizard.mjs";
 
@@ -95,6 +96,14 @@ async function main() {
   if (!existsSync(codexMain)) {
     emit({ status: "error", reason: "codex_missing", appRoot });
     process.exit(1);
+  }
+
+  // Remote takeover moved to standalone CXX. On the first launch after replacing
+  // an older Codex-ZH app, stop and remove its legacy LaunchAgents/menu process.
+  try {
+    cleanupLegacyRemote();
+  } catch {
+    // Cleanup is best-effort and must never block the main desktop app.
   }
 
   // Prepare-only: init runtime without launching.

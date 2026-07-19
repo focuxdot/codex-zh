@@ -188,6 +188,7 @@ test("installer stops holding processes before extraction to avoid DeleteFile co
   assert.match(installer, /function PrepareToInstall/u);
   assert.match(installer, /procedure StopCodexProcesses/u);
   assert.match(installer, /\/End \/TN CodexZhRemote/u);
+  assert.match(installer, /\/Delete \/TN CodexZhRemote \/F/u);
   assert.match(installer, /taskkill\.exe'\), '\/F \/IM codex\.exe \/T'/u);
   assert.match(installer, /taskkill\.exe'\), '\/F \/IM CodexZhTray\.exe \/T'/u);
   assert.match(installer, /taskkill\.exe'\), '\/F \/IM CodexZhLauncher\.exe \/T'/u);
@@ -196,6 +197,17 @@ test("installer stops holding processes before extraction to avoid DeleteFile co
   assert.match(installer, /\$_\.ExecutablePath -like/u);
   // Uninstall mirrors the same cleanup before file removal.
   assert.match(installer, /\[UninstallRun\][\s\S]*\/F \/IM codex\.exe \/T/u);
+});
+
+test("Windows upgrades remove the legacy bundled Remote payload", () => {
+  assert.match(installer, /Type: filesandordirs; Name: "\{app\}\\remote"/u);
+  assert.match(installer, /Type: filesandordirs; Name: "\{app\}\\launcher\\win"/u);
+  assert.match(installer, /Type: files; Name: "\{app\}\\launcher\\remote-backend-core\.mjs"/u);
+  assert.match(installer, /Type: files; Name: "\{app\}\\CodexZhTray\.exe"/u);
+  assert.match(installer, /Type: files; Name: "\{app\}\\native\\CodexZhTray\.cs"/u);
+  assert.doesNotMatch(installer, /Type: files(?:andordirs)?; Name: "[^"]*\.codex-zh\\remote/u);
+  assert.doesNotMatch(staging, /ProjectRoot "remote"/u);
+  assert.doesNotMatch(staging, /Build-CodexZhTray/u);
 });
 
 test("ASAR customization replaces the transparent black startup loader", () => {

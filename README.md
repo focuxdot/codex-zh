@@ -2,7 +2,7 @@
 
 Codex-ZH 中文版是 OpenAI Codex 的中文增强版：**默认中文界面，内置中转站配置向导（Wokey / OpenRouter / 自定义），免改 `config.toml` 就能在国内 API Key 场景下启用 Browser、Chrome、Computer Use 等本地能力。**
 
-> 当前开发版已跟进官方桌面应用更名与大版本升级：底层基线为 ChatGPT 26.707.31428（内置 Codex CLI 0.144.0-alpha.4）。项目名称继续保留为「Codex-ZH 中文版」。
+> 当前开发版的底层基线为 ChatGPT 26.715.31925（内置 Codex CLI 0.145.0-alpha.18），Windows x64、macOS Apple 芯片与 Intel x64 使用同一版定制内核。项目名称继续保留为「Codex-ZH 中文版」。
 
 ### 配套推荐：手机远程接管 + 会话围观
 

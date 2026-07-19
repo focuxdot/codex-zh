@@ -1,7 +1,9 @@
 # Changelog
 
-## [Unreleased]
+## v0.6.0
 
+- Windows x64、macOS Apple 芯片与 Intel x64 的定制内核统一升级到官方 ChatGPT 26.715.31925，内置 Codex CLI 0.145.0-alpha.18，并重新固定各平台官方归档版本、大小与 SHA-256。
+- 覆盖升级时主动停用并清除旧版内嵌远程模块的 Windows 计划任务、macOS LaunchAgent、托盘/菜单进程与安装目录残留；用户自己的旧配对配置保留，远程能力统一引导安装独立开源项目 CXX。
 - **手机远程接管与会话围观能力已独立为开源项目 [focuxdot/CXX](https://github.com/focuxdot/CXX)，不再内置于 Codex-ZH 中文版。** 若需要这些能力，请单独安装 CXX（装在现有 Codex 旁即可，支持 ChatGPT 与 Claude Code）。相关功能从打包和集成中移除，代码库回归到纯粹的中文 UI 补丁与中转配置工具包。
 
 ## v0.5.1

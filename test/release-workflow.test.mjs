@@ -89,14 +89,14 @@ test("release workflow builds macOS arm64 and Intel x64 dmgs alongside the Windo
   assert.match(workflow, /needs: \[release-metadata, macos-installer\]/u);
   // The dmg job must pin the source like the Windows job (no unpinned downloads).
   assert.match(workflow, /unzip -tq "\$SOURCE_ARCHIVE"/u);
-  assert.equal(releaseSources.desktopVersion, "26.707.31428");
-  assert.equal(releaseSources.codexCliVersion, "0.144.0-alpha.4");
+  assert.equal(releaseSources.desktopVersion, "26.715.31925");
+  assert.equal(releaseSources.codexCliVersion, "0.145.0-alpha.18");
   assert.equal(releaseSources.windows.x64.storeProductId, "9PLM9XGG6VKS");
-  assert.equal(releaseSources.windows.x64.packageVersion, "26.707.3748.0");
-  assert.equal(releaseSources.windows.x64.sha256, "181faac13711ed38213c38644be2fc176f78f65a057cd167dc044935d3e81ab9");
-  assert.equal(releaseSources.windows.x64.size, 728683082);
+  assert.equal(releaseSources.windows.x64.packageVersion, "26.715.4045.0");
+  assert.equal(releaseSources.windows.x64.sha256, "5608f294ba95e6205123973b35717ee261c5fcbb9ee6411968f4ec31b866e90a");
+  assert.equal(releaseSources.windows.x64.size, 734845070);
   for (const arch of ["arm64", "x64"]) {
-    assert.match(releaseSources.macos[arch].url, /ChatGPT-darwin-(?:arm64|x64)-26\.707\.31428\.zip$/u);
+    assert.match(releaseSources.macos[arch].url, /ChatGPT-darwin-(?:arm64|x64)-26\.715\.31925\.zip$/u);
     assert.match(releaseSources.macos[arch].sha256, /^[a-f0-9]{64}$/u);
   }
   assert.match(macDmgBuilder, /xattr -d com\.apple\.quarantine "\/Applications\/Codex-叉叉\.app"/u);
